@@ -1,0 +1,30 @@
+name: C CI
+
+on:
+  push:
+    branches: ["main", "develop"]
+  pull_request:
+    branches: ["main", "develop"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cppcheck clang-format
+
+      - name: Check formatting
+        run: |
+          # Verifica se o código está formatado sem alterar os arquivos, ignorando a pasta vendor
+          find . -name "*.c" -o -name "*.h" | grep -v "vendor/" | xargs clang-format --dry-run --Werror
+
+      - name: Run Linter (cppcheck)
+        run: make lint
+
+      - name: Build and Run Tests
+        run: make test

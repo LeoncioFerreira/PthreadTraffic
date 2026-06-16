@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -pthread -Iinclude -Itests/vendor
+CFLAGS = -Wall -Wextra -pthread -Iinclude -Itests/vendor -Isrc -Imodules
 LDFLAGS = -pthread
 
 # Diretórios
@@ -10,7 +10,7 @@ TEST_DIR = tests
 BIN_DIR = bin
 
 # Arquivos
-SOURCES = $(wildcard $(SRC_DIR)/*.c)
+SOURCES = $(shell find $(SRC_DIR) -name "*.c")
 OBJECTS = $(patsubst $(SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(SOURCES))
 # Objetos para os testes (exclui o main.o do simulador)
 TEST_OBJECTS = $(filter-out $(OBJ_DIR)/main.o, $(OBJECTS))
@@ -60,7 +60,7 @@ test: $(TEST_BINS)
 	done
 
 # Compilação de cada arquivo de teste
-$(BIN_DIR)/%: $(TEST_DIR)/%.test.c $(TEST_OBJECTS) $(UNITY_SRC) | $(BIN_DIR)
+$(BIN_DIR)/%: $(TEST_DIR)/%.test.c $(UNITY_SRC) $(filter-out $(SRC_DIR)/main.c, $(SOURCES))
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 $(OBJ_DIR) $(BIN_DIR):
@@ -70,7 +70,8 @@ lint:
 	cppcheck --enable=all --suppress=missingIncludeSystem -Iinclude src/ include/
 
 format:
-	clang-format -i src/*.c include/*.h tests/*.test.c
+	@echo "Formatando o codigo..."
+	clang-format -i $$(find src tests -name "*.c" -o -name "*.h")
 
 clean:
 	rm -rf $(OBJ_DIR) $(BIN_DIR)

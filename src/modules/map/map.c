@@ -52,6 +52,11 @@ Map *load_map(const char *path_file) {
 
   for (int i = 0; i < rows; i++) {
     mapa->cell_grid[i] = (Cell *)malloc(columns * sizeof(Cell));
+    for (int j = 0; j < columns; j++) {
+      mapa->cell_grid[i][j].type = EMPTY;
+      mapa->cell_grid[i][j].direction = ' ';
+      pthread_mutex_init(&mapa->cell_grid[i][j].mutex, NULL);
+    }
   }
 
   int i = 0;
@@ -64,7 +69,6 @@ Map *load_map(const char *path_file) {
       j = 0;
       continue;
     }
-    pthread_mutex_init(&mapa->cell_grid[i][j].mutex, NULL);
 
     switch (c) {
     case '>':

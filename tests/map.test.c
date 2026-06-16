@@ -1,4 +1,5 @@
 #include "../src/modules/map/map.h"
+#include "../src/modules/map/map.c"
 #include "unity.h"
 #include <stdio.h>
 #include <stdlib.h>

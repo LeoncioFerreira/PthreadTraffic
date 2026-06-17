@@ -31,6 +31,10 @@ Map *load_map(const char *path_file) {
         columns = current_columns;
       }
       current_columns = 0;
+
+    } else if (c == '\r') {
+
+      continue;
     } else {
       current_columns += 1;
     }
@@ -41,6 +45,13 @@ Map *load_map(const char *path_file) {
     if (current_columns > columns) {
       columns = current_columns;
     }
+  }
+
+  if (rows == 0 || columns == 0) {
+    fprintf(stderr, "Erro: arquivo de mapa vazio ou sem conteúdo válido (%s)\n",
+            path_file);
+    fclose(arquivo);
+    return NULL;
   }
 
   rewind(arquivo);
@@ -103,6 +114,11 @@ Map *load_map(const char *path_file) {
     if (c == '\r') {
       continue;
     }
+
+    if (i >= rows || j >= columns) {
+      continue;
+    }
+
     switch (c) {
     case '>':
       mapa->cell_grid[i][j].direction = 'L';
@@ -135,6 +151,10 @@ Map *load_map(const char *path_file) {
       break;
 
     default:
+      fprintf(stderr,
+              "Aviso: caractere desconhecido '%c' (0x%02X) em (%d,%d), "
+              "tratado como célula vazia\n",
+              c, c, i, j);
       mapa->cell_grid[i][j].direction = ' ';
       mapa->cell_grid[i][j].type = EMPTY;
       break;

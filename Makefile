@@ -10,7 +10,7 @@ TEST_DIR = tests
 BIN_DIR = bin
 
 # Arquivos
-SOURCES = $(wildcard $(SRC_DIR)/*.c)
+SOURCES = $(shell find $(SRC_DIR) -name '*.c')
 OBJECTS = $(patsubst $(SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(SOURCES))
 # Objetos para os testes (exclui o main.o do simulador)
 TEST_OBJECTS = $(filter-out $(OBJ_DIR)/main.o, $(OBJECTS))
@@ -50,6 +50,7 @@ $(TARGET): $(OBJECTS) | $(BIN_DIR)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Regra para compilar e rodar todos os testes automaticamente
@@ -70,7 +71,7 @@ lint:
 	cppcheck --enable=all --suppress=missingIncludeSystem -Iinclude src/ include/
 
 format:
-	clang-format -i src/*.c include/*.h tests/*.test.c
+	clang-format -i $(SOURCES) include/*.h $(TEST_SOURCES)
 
 clean:
 	rm -rf $(OBJ_DIR) $(BIN_DIR)

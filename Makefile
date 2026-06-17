@@ -56,11 +56,11 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
 test: $(TEST_BINS)
 	@for test in $(TEST_BINS); do \
 		echo "Executando $$test..."; \
-		./$$test; \
+		./$$test || exit 1;\
 	done
 
 # Compilação de cada arquivo de teste
-$(BIN_DIR)/%: $(TEST_DIR)/%.test.c $(UNITY_SRC) $(filter-out $(SRC_DIR)/main.c, $(SOURCES))
+$(BIN_DIR)/%: $(TEST_DIR)/%.test.c $(UNITY_SRC) $(filter-out $(SRC_DIR)/main.c, $(SOURCES)) | $(BIN_DIR)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 $(OBJ_DIR) $(BIN_DIR):
@@ -77,3 +77,6 @@ clean:
 	rm -rf $(OBJ_DIR) $(BIN_DIR)
 
 .PHONY: all test lint format clean run
+
+$(BIN_DIR):
+	mkdir -p $(BIN_DIR)

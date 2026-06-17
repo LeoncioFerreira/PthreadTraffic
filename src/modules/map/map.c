@@ -46,12 +46,42 @@ Map *load_map(const char *path_file) {
   rewind(arquivo);
   Map *mapa = (Map *)malloc(sizeof(Map));
 
+  if (mapa == NULL) {
+    perror("Erro fatal: sem memória para a estrutura Map");
+    fclose(arquivo);
+    return NULL;
+  }
+
   mapa->columns = columns;
   mapa->rows = rows;
   mapa->cell_grid = (Cell **)malloc(rows * sizeof(Cell *));
 
+  if (mapa->cell_grid == NULL) {
+    perror("Erro: sem memória para a matriz de células");
+    free(mapa);
+    fclose(arquivo);
+    return NULL;
+  }
+
   for (int i = 0; i < rows; i++) {
     mapa->cell_grid[i] = (Cell *)malloc(columns * sizeof(Cell));
+
+    if (mapa->cell_grid[i] == NULL) {
+      perror("Erro fatal: sem memória para as colunas");
+
+      for (int k = 0; k < i; k++) {
+
+        for (int c_idx = 0; c_idx < columns; c_idx++) {
+          pthread_mutex_destroy(&mapa->cell_grid[k][c_idx].mutex);
+        }
+
+        free(mapa->cell_grid[k]);
+      }
+      free(mapa->cell_grid);
+      free(mapa);
+      fclose(arquivo);
+      return NULL;
+    }
     for (int j = 0; j < columns; j++) {
       mapa->cell_grid[i][j].type = EMPTY;
       mapa->cell_grid[i][j].direction = ' ';
@@ -70,6 +100,9 @@ Map *load_map(const char *path_file) {
       continue;
     }
 
+    if (c == '\r') {
+      continue;
+    }
     switch (c) {
     case '>':
       mapa->cell_grid[i][j].direction = 'L';
@@ -97,6 +130,11 @@ Map *load_map(const char *path_file) {
       break;
 
     case ' ':
+      mapa->cell_grid[i][j].direction = ' ';
+      mapa->cell_grid[i][j].type = EMPTY;
+      break;
+
+    default:
       mapa->cell_grid[i][j].direction = ' ';
       mapa->cell_grid[i][j].type = EMPTY;
       break;

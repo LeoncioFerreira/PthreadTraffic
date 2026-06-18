@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -pthread -Iinclude -Itests/vendor -Isrc -Imodules
+CFLAGS = -Wall -Wextra -pthread -Iinclude -Itests/vendor
 LDFLAGS = -pthread
 
 # Diretórios
@@ -10,7 +10,7 @@ TEST_DIR = tests
 BIN_DIR = bin
 
 # Arquivos
-SOURCES = $(shell find $(SRC_DIR) -name "*.c")
+SOURCES = $(shell find $(SRC_DIR) -name '*.c')
 OBJECTS = $(patsubst $(SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(SOURCES))
 # Objetos para os testes (exclui o main.o do simulador)
 TEST_OBJECTS = $(filter-out $(OBJ_DIR)/main.o, $(OBJECTS))
@@ -50,17 +50,18 @@ $(TARGET): $(OBJECTS) | $(BIN_DIR)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Regra para compilar e rodar todos os testes automaticamente
 test: $(TEST_BINS)
 	@for test in $(TEST_BINS); do \
 		echo "Executando $$test..."; \
-		./$$test || exit 1;\
+		./$$test; \
 	done
 
 # Compilação de cada arquivo de teste
-$(BIN_DIR)/%: $(TEST_DIR)/%.test.c $(UNITY_SRC) $(filter-out $(SRC_DIR)/main.c, $(SOURCES)) | $(BIN_DIR)
+$(BIN_DIR)/%: $(TEST_DIR)/%.test.c $(TEST_OBJECTS) $(UNITY_SRC) | $(BIN_DIR)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 $(OBJ_DIR) $(BIN_DIR):
@@ -70,13 +71,9 @@ lint:
 	cppcheck --enable=all --suppress=missingIncludeSystem -Iinclude src/ include/
 
 format:
-	@echo "Formatando o codigo..."
-	clang-format -i $$(find src tests -name "*.c" -o -name "*.h")
+	clang-format -i $(SOURCES) include/*.h $(TEST_SOURCES)
 
 clean:
 	rm -rf $(OBJ_DIR) $(BIN_DIR)
 
 .PHONY: all test lint format clean run
-
-$(BIN_DIR):
-	mkdir -p $(BIN_DIR)

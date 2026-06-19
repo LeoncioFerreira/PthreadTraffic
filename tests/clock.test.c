@@ -3,7 +3,7 @@
  * Autor: Salomão
  */
 
-#include "clock/clock.h"
+#include "../src/modules/clock/clock.h"
 #include "unity.h"
 #include <unistd.h>
 

@@ -12,9 +12,9 @@ O projeto segue uma estrutura de **Monolito Modular**, onde cada subsistema é i
 ├── README.md               # Documentação e regras
 ├── TASKS.md                # Cronograma e tarefas
 ├── .gitignore              # Arquivos ignorados pelo Git
-├── mapa.txt                # Configuração da malha viária (entrada)
+├── map.txt                 # Configuração da malha viária (entrada)
 ├── docs/                   # Especificações e design
-│   └── superpowers/specs/  # Documentos de design detalhados
+│   └── initial_design.md   # Design inicial do projeto
 ├── src/
 │   ├── main.c              # Inicialização e orquestração
 │   └── modules/            # Núcleo Modular

@@ -21,7 +21,7 @@ jobs:
       - name: Check formatting
         run: |
           # Verifica se o código está formatado sem alterar os arquivos, ignorando a pasta vendor
-          find src include tests -path tests/vendor -prune -o \( -name "*.c" -o -name "*.h" \) -print | xargs clang-format --dry-run --Werror
+          find . -name "*.c" -o -name "*.h" | grep -v "vendor/" | xargs clang-format --dry-run --Werror
 
       - name: Run Linter (cppcheck)
         run: make lint

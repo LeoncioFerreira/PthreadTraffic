@@ -71,7 +71,7 @@ lint:
 	cppcheck --enable=all --suppress=missingIncludeSystem -Iinclude src/ include/
 
 format:
-	clang-format -i $(SOURCES) include/*.h $(TEST_SOURCES)
+	clang-format -i $(SOURCES) $(shell find $(SRC_DIR) -name '*.h') include/*.h $(TEST_SOURCES)
 
 clean:
 	rm -rf $(OBJ_DIR) $(BIN_DIR)

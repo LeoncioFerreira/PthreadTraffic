@@ -1,5 +1,6 @@
 #include "vehicle.h"
 #include "../clock/clock.h"
+#include "../traffic/traffic.h"
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -68,11 +69,30 @@ void *vehicle_lifecycle(void *arg) {
                             &next_row, &next_col);
 
     if (is_within_map_bounds(map, next_row, next_col)) {
-      pthread_mutex_lock(&map->cell_grid[next_row][next_col].mutex);
+
+      if (map->cell_grid[next_row][next_col].type == INTERSECTION) {
+        bool safely_entered = false;
+
+        while (!safely_entered) {
+          traffic_wait_for_green(next_row, next_col, current_direction);
+
+          pthread_mutex_lock(&map->cell_grid[next_row][next_col].mutex);
+
+          if (traffic_is_green(next_row, next_col, current_direction)) {
+            safely_entered = true;
+          } else {
+            pthread_mutex_unlock(&map->cell_grid[next_row][next_col].mutex);
+          }
+        }
+      } else {
+        pthread_mutex_lock(&map->cell_grid[next_row][next_col].mutex);
+      }
+
       pthread_mutex_unlock(&map->cell_grid[vehicle->row][vehicle->col].mutex);
 
       vehicle->row = next_row;
       vehicle->col = next_col;
+
     } else {
       pthread_mutex_unlock(&map->cell_grid[vehicle->row][vehicle->col].mutex);
       break;

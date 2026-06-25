@@ -6,6 +6,7 @@
 
 #include "modules/clock/clock.h"
 #include "modules/map/map.h"
+#include "modules/traffic/traffic.h"
 #include "modules/vehicle/vehicle.h"
 #include <pthread.h>
 #include <signal.h>
@@ -36,6 +37,7 @@ static bool init_systems(Map **mapa) {
     fprintf(stderr, "[MAIN] ERRO: Falha no carregamento do mapa.\n");
     return false;
   }
+  traffic_init(*mapa, 5);
 
   /* 2. Inicializa as estruturas do Relógio (Mutex e Condição) */
   clock_init();
@@ -62,6 +64,7 @@ int main() {
   /* Dispara a thread do Relógio */
   printf("[MAIN] Ativando a thread do Relógio...\n");
   clock_start(1000);
+  traffic_start();
 
   /* Cria e dispara o Veículo de teste */
   printf("[MAIN] Criando e ativando veículo de teste...\n");
@@ -82,6 +85,10 @@ int main() {
   }
 
   printf("[MAIN] Encerrando recursos de forma segura...\n");
+
+  printf("[MAIN] Parando e destruindo o subsistema de semáforos...\n");
+  traffic_stop();
+  traffic_destroy();
 
   /* Para e destrói o relógio do sistema */
   printf("[MAIN] Parando e destruindo o relógio...\n");

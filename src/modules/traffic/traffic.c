@@ -4,11 +4,10 @@
 #include <stdlib.h>
 
 /**
- * Descrição: Esse arquivo implementa a thread que gerencia os semáforos, alternando 
- * os sinais entre as direções ao ritmo do relógio global. Também fornece 
- * mecanismos  para barrar os carros no sinal vermelho e 
- * acordá-los com segurança quando o sinal abrir.
- * Autor: Paulo
+ * Descrição: Esse arquivo implementa a thread que gerencia os semáforos,
+ * alternando os sinais entre as direções ao ritmo do relógio global. Também
+ * fornece mecanismos  para barrar os carros no sinal vermelho e acordá-los com
+ * segurança quando o sinal abrir. Autor: Paulo
  */
 static TrafficLight *lights = NULL;
 static int num_lights = 0;

@@ -8,7 +8,7 @@
 /**
  * Descrição: Implementação do ciclo de vida e lógicas de exclusão mútua
  * (impenetratividade) das threads de Veículos na simulação.
- * Autor: Leôncio Ferreira
+ * Autor: Leôncio Ferreira e André Wesley
  */
 
 static void calculate_next_position(char direction, int current_row,
@@ -49,6 +49,35 @@ static uint64_t wait_for_next_tick() {
   return current_tick;
 }
 
+/**
+ * Descrição: Estratégia Anti-Deadlock (Look-Ahead). Verifica se a célula de
+ * saída após o cruzamento está livre usando 'pthread_mutex_trylock' de forma
+ * não-bloqueante. Evita Gridlocks (espera circular) impedindo o veículo de
+ * entrar na interseção se o fluxo à frente estiver retido.
+ * Autor: André Wesley
+ */
+static bool is_exit_cell_free(const Map *map, int current_row, int current_col,
+                              char direction) {
+  int next_row, next_col;
+  int exit_row, exit_col;
+
+  calculate_next_position(direction, current_row, current_col, &next_row,
+                          &next_col);
+  calculate_next_position(direction, next_row, next_col, &exit_row, &exit_col);
+
+  if (!is_within_map_bounds(map, exit_row, exit_col)) {
+    return true;
+  }
+  int result = pthread_mutex_trylock(&map->cell_grid[exit_row][exit_col].mutex);
+
+  if (result == 0) {
+    pthread_mutex_unlock(&map->cell_grid[exit_row][exit_col].mutex);
+    return true;
+  }
+
+  return false;
+}
+
 void *vehicle_lifecycle(void *arg) {
   Vehicle *vehicle = (Vehicle *)arg;
   Map *map = vehicle->map_ref;
@@ -78,7 +107,9 @@ void *vehicle_lifecycle(void *arg) {
 
           pthread_mutex_lock(&map->cell_grid[next_row][next_col].mutex);
 
-          if (traffic_is_green(next_row, next_col, current_direction)) {
+          if (traffic_is_green(next_row, next_col, current_direction) &&
+              is_exit_cell_free(map, vehicle->row, vehicle->col,
+                                current_direction)) {
             safely_entered = true;
           } else {
             pthread_mutex_unlock(&map->cell_grid[next_row][next_col].mutex);

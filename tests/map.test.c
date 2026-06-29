@@ -1,7 +1,9 @@
 #include "../src/modules/map/map.h"
 #include "unity.h"
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+volatile bool keep_running = true;
 
 void setUp() {
   FILE *f = fopen("mini_mapa.txt", "w");

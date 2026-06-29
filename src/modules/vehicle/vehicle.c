@@ -49,24 +49,116 @@ static uint64_t wait_for_next_tick() {
   return current_tick;
 }
 
+extern volatile bool keep_running;
+
 void *vehicle_lifecycle(void *arg) {
   Vehicle *vehicle = (Vehicle *)arg;
   Map *map = vehicle->map_ref;
 
+  // 1. Trava a célula inicial e se registra nela
   pthread_mutex_lock(&map->cell_grid[vehicle->row][vehicle->col].mutex);
+  map->cell_grid[vehicle->row][vehicle->col].current_vehicle = vehicle;
 
-  while (true) {
+  // Guarda a direção inicial
+  char current_direction = map->cell_grid[vehicle->row][vehicle->col].direction;
+
+  while (keep_running) {
     uint64_t current_tick = wait_for_next_tick();
 
     if (current_tick % vehicle->speed_ticks != 0) {
       continue;
     }
-    char current_direction =
-        map->cell_grid[vehicle->row][vehicle->col].direction;
-    int next_row, next_col;
 
+    // ======== INÍCIO DA LÓGICA DE DIREÇÃO INTELIGENTE ========
+    char cell_dir = map->cell_grid[vehicle->row][vehicle->col].direction;
+    CellType type = map->cell_grid[vehicle->row][vehicle->col].type;
+
+    if (cell_dir != ' ') {
+      // Pista normal: obedece a seta do chão
+      current_direction = cell_dir;
+
+    } else if (type == INTERSECTION) {
+      char valid_turns[4];
+      int num_turns = 0;
+
+      // 1. Prioriza seguir reto (adicionamos duas vezes para dar peso na
+      // roleta)
+      valid_turns[num_turns++] = current_direction;
+      valid_turns[num_turns++] = current_direction;
+
+      // 2. O "Radar": Olha até 2 blocos à frente para achar a faixa correta
+
+      // Testa virar para o Norte (Cima)
+      if (current_direction != 'S' && current_direction != 'v') {
+        for (int i = 1; i <= 2; i++) {
+          if (is_within_map_bounds(map, vehicle->row - i, vehicle->col)) {
+            char d = map->cell_grid[vehicle->row - i][vehicle->col].direction;
+            if (d == 'N' || d == '^') {
+              valid_turns[num_turns++] = '^';
+              break;
+            }
+            if (d != ' ' && d != '+')
+              break; // Bateu numa parede ou contramão, aborta!
+          }
+        }
+      }
+      // Testa virar para o Sul (Baixo)
+      if (current_direction != 'N' && current_direction != '^') {
+        for (int i = 1; i <= 2; i++) {
+          if (is_within_map_bounds(map, vehicle->row + i, vehicle->col)) {
+            char d = map->cell_grid[vehicle->row + i][vehicle->col].direction;
+            if (d == 'S' || d == 'v') {
+              valid_turns[num_turns++] = 'v';
+              break;
+            }
+            if (d != ' ' && d != '+')
+              break;
+          }
+        }
+      }
+      // Testa virar para o Leste (Direita)
+      if (current_direction != 'O' && current_direction != '<') {
+        for (int i = 1; i <= 2; i++) {
+          if (is_within_map_bounds(map, vehicle->row, vehicle->col + i)) {
+            char d = map->cell_grid[vehicle->row][vehicle->col + i].direction;
+            if (d == 'L' || d == '>') {
+              valid_turns[num_turns++] = '>';
+              break;
+            }
+            if (d != ' ' && d != '+')
+              break;
+          }
+        }
+      }
+      // Testa virar para o Oeste (Esquerda)
+      if (current_direction != 'L' && current_direction != '>') {
+        for (int i = 1; i <= 2; i++) {
+          if (is_within_map_bounds(map, vehicle->row, vehicle->col - i)) {
+            char d = map->cell_grid[vehicle->row][vehicle->col - i].direction;
+            if (d == 'O' || d == '<') {
+              valid_turns[num_turns++] = '<';
+              break;
+            }
+            if (d != ' ' && d != '+')
+              break;
+          }
+        }
+      }
+
+      // 3. Sorteia uma das opções válidas
+      int random_choice = (rand() + vehicle->id + current_tick) % num_turns;
+      current_direction = valid_turns[random_choice];
+    }
+
+    int next_row, next_col;
     calculate_next_position(current_direction, vehicle->row, vehicle->col,
                             &next_row, &next_col);
+
+    // PROTEÇÃO ANTI-DEADLOCK: Se o carro não sabe para onde ir, ele não tenta
+    // trancar a própria célula novamente.
+    if (next_row == vehicle->row && next_col == vehicle->col) {
+      continue;
+    }
 
     if (is_within_map_bounds(map, next_row, next_col)) {
 
@@ -88,19 +180,24 @@ void *vehicle_lifecycle(void *arg) {
         pthread_mutex_lock(&map->cell_grid[next_row][next_col].mutex);
       }
 
+      // Atualiza os ponteiros do mapa com Lock Coupling
+      map->cell_grid[next_row][next_col].current_vehicle = vehicle;
+      map->cell_grid[vehicle->row][vehicle->col].current_vehicle = NULL;
+
       pthread_mutex_unlock(&map->cell_grid[vehicle->row][vehicle->col].mutex);
 
       vehicle->row = next_row;
       vehicle->col = next_col;
 
     } else {
+      // O carro saiu do mapa
+      map->cell_grid[vehicle->row][vehicle->col].current_vehicle = NULL;
       pthread_mutex_unlock(&map->cell_grid[vehicle->row][vehicle->col].mutex);
       break;
     }
   }
   return NULL;
 }
-
 Vehicle *vehicle_create_and_start(int id, int start_row, int start_col,
                                   int speed_ticks, VehicleType type, Map *map) {
   Vehicle *vehicle = (Vehicle *)malloc(sizeof(Vehicle));
@@ -120,6 +217,8 @@ Vehicle *vehicle_create_and_start(int id, int start_row, int start_col,
 }
 
 void vehicle_destroy(Vehicle *vehicle) {
+  // Força a quebra do Deadlock abortando a thread antes de dar o join
+  pthread_cancel(vehicle->thread_id);
   pthread_join(vehicle->thread_id, NULL);
   free(vehicle);
 }

@@ -97,6 +97,7 @@ Map *load_map(const char *path_file) {
       mapa->cell_grid[i][j].type = EMPTY;
       mapa->cell_grid[i][j].direction = ' ';
       pthread_mutex_init(&mapa->cell_grid[i][j].mutex, NULL);
+      mapa->cell_grid[i][j].current_vehicle = NULL;
     }
   }
 

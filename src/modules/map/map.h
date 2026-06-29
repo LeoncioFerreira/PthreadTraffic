@@ -9,6 +9,9 @@
  * matriz principal do Mapa (Map). Autor: Paulo Gabriel
  */
 
+// FOWARD DECLARATION.
+typedef struct Vehicle Vehicle;
+
 typedef enum celltype {
   EMPTY,
   ROADS,
@@ -20,6 +23,7 @@ typedef struct cell {
   char direction; // 'N' (Norte), 'S' (Sul), 'L' (Leste), 'O' (Oeste) ou ' '
                   // (vazio)
   pthread_mutex_t mutex;
+  Vehicle *current_vehicle;
 
 } Cell;
 

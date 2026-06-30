@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+
 /**
  * Descrição: Implementação do ciclo de vida e lógicas de exclusão mútua
  * (impenetratividade) das threads de Veículos na simulação.
@@ -49,40 +50,23 @@ static uint64_t wait_for_next_tick() {
   return current_tick;
 }
 
-/**
- * Descrição: Estratégia Anti-Deadlock (Look-Ahead). Verifica se a célula de
- * saída após o cruzamento está livre usando 'pthread_mutex_trylock' de forma
- * não-bloqueante. Evita Gridlocks (espera circular) impedindo o veículo de
- * entrar na interseção se o fluxo à frente estiver retido.
- * Autor: André Wesley
- */
-static bool is_exit_cell_free(const Map *map, int current_row, int current_col,
-                              char direction) {
-  int next_row, next_col;
-  int exit_row, exit_col;
+static bool try_reserve_exit_cell(const Map *map, int inter_row, int inter_col,
+                                  char direction, int *exit_row,
+                                  int *exit_col) {
+  calculate_next_position(direction, inter_row, inter_col, exit_row, exit_col);
 
-  calculate_next_position(direction, current_row, current_col, &next_row,
-                          &next_col);
-  calculate_next_position(direction, next_row, next_col, &exit_row, &exit_col);
-
-  if (!is_within_map_bounds(map, exit_row, exit_col)) {
-    return true;
-  }
-  int result = pthread_mutex_trylock(&map->cell_grid[exit_row][exit_col].mutex);
-
-  if (result == 0) {
-    pthread_mutex_unlock(&map->cell_grid[exit_row][exit_col].mutex);
+  if (!is_within_map_bounds(map, *exit_row, *exit_col)) {
     return true;
   }
 
-  return false;
+  int result =
+      pthread_mutex_trylock(&map->cell_grid[*exit_row][*exit_col].mutex);
+  return (result == 0);
 }
 
 void *vehicle_lifecycle(void *arg) {
   Vehicle *vehicle = (Vehicle *)arg;
   Map *map = vehicle->map_ref;
-
-  pthread_mutex_lock(&map->cell_grid[vehicle->row][vehicle->col].mutex);
 
   while (true) {
     uint64_t current_tick = wait_for_next_tick();
@@ -98,23 +82,27 @@ void *vehicle_lifecycle(void *arg) {
                             &next_row, &next_col);
 
     if (is_within_map_bounds(map, next_row, next_col)) {
+      int exit_row = -1, exit_col = -1;
+      bool holding_exit_lock = false;
 
       if (map->cell_grid[next_row][next_col].type == INTERSECTION) {
-        bool safely_entered = false;
-
-        while (!safely_entered) {
-          traffic_wait_for_green(next_row, next_col, current_direction);
-
-          pthread_mutex_lock(&map->cell_grid[next_row][next_col].mutex);
-
-          if (traffic_is_green(next_row, next_col, current_direction) &&
-              is_exit_cell_free(map, vehicle->row, vehicle->col,
-                                current_direction)) {
-            safely_entered = true;
-          } else {
-            pthread_mutex_unlock(&map->cell_grid[next_row][next_col].mutex);
-          }
+        if (!traffic_is_green(next_row, next_col, current_direction)) {
+          continue;
         }
+
+        if (pthread_mutex_trylock(&map->cell_grid[next_row][next_col].mutex) !=
+            0) {
+          continue;
+        }
+
+        if (!traffic_is_green(next_row, next_col, current_direction) ||
+            !try_reserve_exit_cell(map, next_row, next_col, current_direction,
+                                   &exit_row, &exit_col)) {
+
+          pthread_mutex_unlock(&map->cell_grid[next_row][next_col].mutex);
+          continue;
+        }
+        holding_exit_lock = true;
       } else {
         pthread_mutex_lock(&map->cell_grid[next_row][next_col].mutex);
       }
@@ -123,6 +111,10 @@ void *vehicle_lifecycle(void *arg) {
 
       vehicle->row = next_row;
       vehicle->col = next_col;
+
+      if (holding_exit_lock && is_within_map_bounds(map, exit_row, exit_col)) {
+        pthread_mutex_unlock(&map->cell_grid[exit_row][exit_col].mutex);
+      }
 
     } else {
       pthread_mutex_unlock(&map->cell_grid[vehicle->row][vehicle->col].mutex);
@@ -146,7 +138,15 @@ Vehicle *vehicle_create_and_start(int id, int start_row, int start_col,
   vehicle->type = type;
   vehicle->map_ref = map;
 
-  pthread_create(&vehicle->thread_id, NULL, vehicle_lifecycle, (void *)vehicle);
+  pthread_mutex_lock(&map->cell_grid[start_row][start_col].mutex);
+
+  if (pthread_create(&vehicle->thread_id, NULL, vehicle_lifecycle,
+                     (void *)vehicle) != 0) {
+    pthread_mutex_unlock(&map->cell_grid[start_row][start_col].mutex);
+    free(vehicle);
+    return NULL;
+  }
+
   return vehicle;
 }
 

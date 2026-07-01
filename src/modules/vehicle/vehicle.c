@@ -7,9 +7,9 @@
 #include <stdlib.h>
 
 /**
- * Descrição: Implementação do ciclo de vida das threads de veículos, das lógicas
- * de exclusão mútua na simulação e da estratégia
- * anti-deadlock por meio de Look-Ahead estendido.
+ * Descrição: Implementação do ciclo de vida das threads de veículos, das
+ * lógicas de exclusão mútua na simulação e da estratégia anti-deadlock por meio
+ * de Look-Ahead estendido.
  *
  * Autores: Leôncio Ferreira e André Wesley.
  */

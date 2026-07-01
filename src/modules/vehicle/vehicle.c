@@ -5,10 +5,13 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+
 /**
- * Descrição: Implementação do ciclo de vida e lógicas de exclusão mútua
- * (impenetratividade) das threads de Veículos na simulação.
- * Autor: Leôncio Ferreira
+ * Descrição: Implementação do ciclo de vida das threads de veículos, das
+ * lógicas de exclusão mútua na simulação e da estratégia anti-deadlock por meio
+ * de Look-Ahead estendido.
+ *
+ * Autores: Leôncio Ferreira e André Wesley.
  */
 
 static void calculate_next_position(char direction, int current_row,
@@ -49,52 +52,137 @@ static uint64_t wait_for_next_tick() {
   return current_tick;
 }
 
+static bool try_reserve_exit_cell(const Map *map, int inter_row, int inter_col,
+                                  char direction, int *exit_row,
+                                  int *exit_col) {
+  calculate_next_position(direction, inter_row, inter_col, exit_row, exit_col);
+
+  if (!is_within_map_bounds(map, *exit_row, *exit_col)) {
+    return true;
+  }
+
+  if (map->cell_grid[*exit_row][*exit_col].type == INTERSECTION) {
+    if (!traffic_is_green(*exit_row, *exit_col, direction)) {
+      return false;
+    }
+  }
+
+  int result =
+      pthread_mutex_trylock(&map->cell_grid[*exit_row][*exit_col].mutex);
+  return (result == 0);
+}
+
 void *vehicle_lifecycle(void *arg) {
   Vehicle *vehicle = (Vehicle *)arg;
   Map *map = vehicle->map_ref;
 
-  pthread_mutex_lock(&map->cell_grid[vehicle->row][vehicle->col].mutex);
+  bool current_owns_exit_lock = false;
+  int locked_exit_row = -1;
+  int locked_exit_col = -1;
+
+  char last_valid_direction =
+      map->cell_grid[vehicle->row][vehicle->col].direction;
+  if (last_valid_direction == ' ') {
+    last_valid_direction = 'L';
+  }
 
   while (true) {
     uint64_t current_tick = wait_for_next_tick();
 
+    if (!clock_is_running()) {
+      pthread_mutex_unlock(&map->cell_grid[vehicle->row][vehicle->col].mutex);
+      if (current_owns_exit_lock &&
+          is_within_map_bounds(map, locked_exit_row, locked_exit_col)) {
+        pthread_mutex_unlock(
+            &map->cell_grid[locked_exit_row][locked_exit_col].mutex);
+      }
+      break;
+    }
+
     if (current_tick % vehicle->speed_ticks != 0) {
       continue;
     }
+
     char current_direction =
         map->cell_grid[vehicle->row][vehicle->col].direction;
-    int next_row, next_col;
 
+    if (map->cell_grid[vehicle->row][vehicle->col].type == INTERSECTION ||
+        current_direction == ' ') {
+      current_direction = last_valid_direction;
+    } else {
+      last_valid_direction = current_direction;
+    }
+
+    int next_row, next_col;
     calculate_next_position(current_direction, vehicle->row, vehicle->col,
                             &next_row, &next_col);
 
     if (is_within_map_bounds(map, next_row, next_col)) {
+      int exit_row = -1, exit_col = -1;
+      bool target_is_intersection =
+          (map->cell_grid[next_row][next_col].type == INTERSECTION);
 
-      if (map->cell_grid[next_row][next_col].type == INTERSECTION) {
-        bool safely_entered = false;
+      if (target_is_intersection) {
+        bool already_owns_target_lock =
+            (current_owns_exit_lock && next_row == locked_exit_row &&
+             next_col == locked_exit_col);
 
-        while (!safely_entered) {
-          traffic_wait_for_green(next_row, next_col, current_direction);
+        if (!already_owns_target_lock) {
+          if (!traffic_is_green(next_row, next_col, current_direction)) {
+            continue;
+          }
 
-          pthread_mutex_lock(&map->cell_grid[next_row][next_col].mutex);
-
-          if (traffic_is_green(next_row, next_col, current_direction)) {
-            safely_entered = true;
-          } else {
-            pthread_mutex_unlock(&map->cell_grid[next_row][next_col].mutex);
+          if (pthread_mutex_trylock(
+                  &map->cell_grid[next_row][next_col].mutex) != 0) {
+            continue;
           }
         }
+
+        if (!traffic_is_green(next_row, next_col, current_direction) ||
+            !try_reserve_exit_cell(map, next_row, next_col, current_direction,
+                                   &exit_row, &exit_col)) {
+
+          if (!already_owns_target_lock) {
+            pthread_mutex_unlock(&map->cell_grid[next_row][next_col].mutex);
+          }
+          continue;
+        }
       } else {
-        pthread_mutex_lock(&map->cell_grid[next_row][next_col].mutex);
+        if (current_owns_exit_lock && next_row == locked_exit_row &&
+            next_col == locked_exit_col) {
+        } else {
+          if (pthread_mutex_trylock(
+                  &map->cell_grid[next_row][next_col].mutex) != 0) {
+            continue;
+          }
+        }
       }
 
-      pthread_mutex_unlock(&map->cell_grid[vehicle->row][vehicle->col].mutex);
+      int previous_row = vehicle->row;
+      int previous_col = vehicle->col;
 
       vehicle->row = next_row;
       vehicle->col = next_col;
 
+      pthread_mutex_unlock(&map->cell_grid[previous_row][previous_col].mutex);
+
+      if (target_is_intersection) {
+        current_owns_exit_lock = true;
+        locked_exit_row = exit_row;
+        locked_exit_col = exit_col;
+      } else {
+        current_owns_exit_lock = false;
+        locked_exit_row = -1;
+        locked_exit_col = -1;
+      }
+
     } else {
       pthread_mutex_unlock(&map->cell_grid[vehicle->row][vehicle->col].mutex);
+      if (current_owns_exit_lock &&
+          is_within_map_bounds(map, locked_exit_row, locked_exit_col)) {
+        pthread_mutex_unlock(
+            &map->cell_grid[locked_exit_row][locked_exit_col].mutex);
+      }
       break;
     }
   }
@@ -115,11 +203,21 @@ Vehicle *vehicle_create_and_start(int id, int start_row, int start_col,
   vehicle->type = type;
   vehicle->map_ref = map;
 
-  pthread_create(&vehicle->thread_id, NULL, vehicle_lifecycle, (void *)vehicle);
+  pthread_mutex_lock(&map->cell_grid[start_row][start_col].mutex);
+
+  if (pthread_create(&vehicle->thread_id, NULL, vehicle_lifecycle,
+                     (void *)vehicle) != 0) {
+    pthread_mutex_unlock(&map->cell_grid[start_row][start_col].mutex);
+    free(vehicle);
+    return NULL;
+  }
+
   return vehicle;
 }
 
 void vehicle_destroy(Vehicle *vehicle) {
-  pthread_join(vehicle->thread_id, NULL);
-  free(vehicle);
+  if (vehicle != NULL) {
+    pthread_join(vehicle->thread_id, NULL);
+    free(vehicle);
+  }
 }

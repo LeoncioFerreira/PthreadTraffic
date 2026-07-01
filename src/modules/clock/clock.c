@@ -5,6 +5,7 @@
  */
 
 #include "clock.h"
+#include <stdbool.h>
 #include <stdio.h>
 #include <time.h>
 
@@ -82,4 +83,12 @@ void clock_stop(void) {
 void clock_destroy(void) {
   pthread_mutex_destroy(&clock_mutex);
   pthread_cond_destroy(&clock_cond);
+}
+
+bool clock_is_running(void) {
+  bool running;
+  pthread_mutex_lock(&clock_mutex);
+  running = is_running;
+  pthread_mutex_unlock(&clock_mutex);
+  return running;
 }

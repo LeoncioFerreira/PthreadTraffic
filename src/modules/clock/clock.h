@@ -35,4 +35,9 @@ void clock_stop(void);
  */
 void clock_destroy(void);
 
+/*
+ * Retorna se o relógio ainda está em execução de forma thread-safe.
+ */
+bool clock_is_running(void);
+
 #endif /* CLOCK_H */

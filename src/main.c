@@ -86,22 +86,20 @@ int main() {
 
   printf("[MAIN] Encerrando recursos de forma segura...\n");
 
+  if (test_vehicle != NULL) {
+    printf(
+        "[MAIN] Finalizando a thread do veículo de teste de forma segura...\n");
+    vehicle_destroy(test_vehicle);
+  }
+
   printf("[MAIN] Parando e destruindo o subsistema de semáforos...\n");
   traffic_stop();
   traffic_destroy();
 
-  /* Para e destrói o relógio do sistema */
   printf("[MAIN] Parando e destruindo o relógio...\n");
   clock_stop();
   clock_destroy();
 
-  /* Libera o veículo de teste de forma segura sem travar no join */
-  if (test_vehicle != NULL) {
-    printf("[MAIN] Liberando memória do veículo...\n");
-    free(test_vehicle);
-  }
-
-  /* 3. Libera a memória do mapa */
   printf("[MAIN] Destruindo a estrutura do mapa...\n");
   destroy(mapa);
 

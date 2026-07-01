@@ -17,7 +17,7 @@ typedef enum {
   SLOW_CAR    // Move a cada 4 ticks
 } VehicleType;
 
-typedef struct {
+typedef struct Vehicle {
   int id;
   int row;
   int col;

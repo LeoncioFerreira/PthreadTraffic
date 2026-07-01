@@ -2,7 +2,10 @@
 #include "../src/modules/clock/clock.h"
 #include "../src/modules/map/map.h"
 #include "unity.h"
+#include <stdbool.h>
 #include <unistd.h>
+
+volatile bool keep_running = true;
 
 /**
  * Descrição: Testes unitários para o módulo de veículos. Valida a criação,

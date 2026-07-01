@@ -5,6 +5,7 @@
  */
 
 #include "modules/clock/clock.h"
+#include "modules/display/display.h"
 #include "modules/map/map.h"
 #include "modules/traffic/traffic.h"
 #include "modules/vehicle/vehicle.h"
@@ -13,10 +14,13 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include <unistd.h>
 
+#define NUM_VEHICLES 5
+
 /* Esta variável controla se o simulador continua rodando ou não */
-static volatile bool keep_running = true;
+volatile bool keep_running = true;
 
 /* Função chamada automaticamente quando o usuário aperta Ctrl+C no terminal */
 static void handle_shutdown_signal(int signal) {
@@ -47,6 +51,8 @@ static bool init_systems(Map **mapa) {
 }
 
 int main() {
+
+  srand(time(NULL));
   /* Direciona o Ctrl+C para a função */
   signal(SIGINT, handle_shutdown_signal);
 
@@ -66,16 +72,32 @@ int main() {
   clock_start(1000);
   traffic_start();
 
-  /* Cria e dispara o Veículo de teste */
-  printf("[MAIN] Criando e ativando veículo de teste...\n");
-  Vehicle *test_vehicle = vehicle_create_and_start(1, 0, 0, 1, 0, mapa);
-  if (test_vehicle == NULL) {
-    fprintf(stderr, "[MAIN] ERRO: Falha ao criar o veículo de teste.\n");
-    clock_stop();
-    clock_destroy();
-    destroy(mapa);
-    return EXIT_FAILURE;
+  /* Cria e dispara a Frota de Veículos */
+  printf("[MAIN] Criando e ativando frota de veículos...\n");
+
+  Vehicle *fleet[NUM_VEHICLES];
+
+  // Coordenadas (linha, coluna) de ruas válidas nas bordas do seu mapa atual
+  // Ex: Linha 3 (Leste), Linha 8 (Leste), Linha 13 (Leste), Linha 4 (Oeste),
+  // Linha 9 (Oeste)
+  const int start_positions[NUM_VEHICLES][2] = {
+      {3, 0}, {8, 0}, {13, 0}, {4, 42}, {9, 42}};
+
+  for (int i = 0; i < NUM_VEHICLES; i++) {
+    // Passamos o tipo NORMAL_CAR (ou FAST_CAR se preferir)
+    fleet[i] = vehicle_create_and_start(
+        i + 1, start_positions[i][0], start_positions[i][1], 1, FAST_CAR, mapa);
+
+    if (fleet[i] == NULL) {
+      fprintf(stderr, "[MAIN] ERRO: Falha ao criar o veículo %d.\n", i + 1);
+      // Num cenário real faríamos um loop de limpeza aqui, mas vamos seguir
+    }
   }
+
+  printf("[MAIN] Simulação em andamento. Use Ctrl+C para sair.\n");
+
+  printf("[MAIN] Ativando a thread de Visualização (Display)...\n");
+  display_start(mapa);
 
   printf("[MAIN] Simulação em andamento. Use Ctrl+C para sair.\n");
 
@@ -86,11 +108,8 @@ int main() {
 
   printf("[MAIN] Encerrando recursos de forma segura...\n");
 
-  if (test_vehicle != NULL) {
-    printf(
-        "[MAIN] Finalizando a thread do veículo de teste de forma segura...\n");
-    vehicle_destroy(test_vehicle);
-  }
+  printf("[MAIN] Parando o subsistema de visualização...\n");
+  display_stop();
 
   printf("[MAIN] Parando e destruindo o subsistema de semáforos...\n");
   traffic_stop();
@@ -100,6 +119,15 @@ int main() {
   clock_stop();
   clock_destroy();
 
+  /* Libera a frota de veículos de forma segura */
+  printf("[MAIN] Liberando memória dos veículos...\n");
+  for (int i = 0; i < NUM_VEHICLES; i++) {
+    if (fleet[i] != NULL) {
+      vehicle_destroy(fleet[i]);
+    }
+  }
+
+  /* 3. Libera a memória do mapa */
   printf("[MAIN] Destruindo a estrutura do mapa...\n");
   destroy(mapa);
 

@@ -7,7 +7,10 @@
 #include "../src/modules/traffic/traffic.h"
 #include "../src/modules/map/map.h"
 #include "vendor/unity.h"
+#include <stdbool.h>
 #include <stdlib.h>
+
+volatile bool keep_running = true;
 
 static Map *test_map = NULL;
 

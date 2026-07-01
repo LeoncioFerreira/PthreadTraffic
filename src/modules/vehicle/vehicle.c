@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+
 /**
  * Descrição: Implementação do ciclo de vida dos veículos com controle
  * anti-deadlock via Look-Ahead estendido, reserva persistente de escoamento,
@@ -87,7 +88,6 @@ void *vehicle_lifecycle(void *arg) {
   while (true) {
     uint64_t current_tick = wait_for_next_tick();
 
-    /* VERIFICAÇÃO SEGURO: Usando a API do Relógio */
     if (!clock_is_running()) {
       pthread_mutex_unlock(&map->cell_grid[vehicle->row][vehicle->col].mutex);
       if (current_owns_exit_lock &&
@@ -122,20 +122,28 @@ void *vehicle_lifecycle(void *arg) {
           (map->cell_grid[next_row][next_col].type == INTERSECTION);
 
       if (target_is_intersection) {
-        if (!traffic_is_green(next_row, next_col, current_direction)) {
-          continue;
-        }
+        bool already_owns_target_lock =
+            (current_owns_exit_lock && next_row == locked_exit_row &&
+             next_col == locked_exit_col);
 
-        if (pthread_mutex_trylock(&map->cell_grid[next_row][next_col].mutex) !=
-            0) {
-          continue;
+        if (!already_owns_target_lock) {
+          if (!traffic_is_green(next_row, next_col, current_direction)) {
+            continue;
+          }
+
+          if (pthread_mutex_trylock(
+                  &map->cell_grid[next_row][next_col].mutex) != 0) {
+            continue;
+          }
         }
 
         if (!traffic_is_green(next_row, next_col, current_direction) ||
             !try_reserve_exit_cell(map, next_row, next_col, current_direction,
                                    &exit_row, &exit_col)) {
 
-          pthread_mutex_unlock(&map->cell_grid[next_row][next_col].mutex);
+          if (!already_owns_target_lock) {
+            pthread_mutex_unlock(&map->cell_grid[next_row][next_col].mutex);
+          }
           continue;
         }
       } else {

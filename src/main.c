@@ -80,7 +80,7 @@ int main() {
   // Coordenadas (linha, coluna) de ruas válidas nas bordas do seu mapa atual
   // Ex: Linha 3 (Leste), Linha 8 (Leste), Linha 13 (Leste), Linha 4 (Oeste),
   // Linha 9 (Oeste)
-  cosnt int start_positions[NUM_VEHICLES][2] = {
+  const int start_positions[NUM_VEHICLES][2] = {
       {3, 0}, {8, 0}, {13, 0}, {4, 42}, {9, 42}};
 
   for (int i = 0; i < NUM_VEHICLES; i++) {
@@ -115,7 +115,6 @@ int main() {
   traffic_stop();
   traffic_destroy();
 
-  /* Para e destrói o relógio do sistema */
   printf("[MAIN] Parando e destruindo o relógio...\n");
   clock_stop();
   clock_destroy();

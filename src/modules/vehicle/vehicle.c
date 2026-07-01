@@ -7,10 +7,11 @@
 #include <stdlib.h>
 
 /**
- * Descrição: Implementação do ciclo de vida dos veículos com controle
- * anti-deadlock via Look-Ahead estendido, reserva persistente de escoamento,
- * inteligência de navegação em cruzamentos e encerramento seguro via API de
- * clock. Autor: Leôncio Ferreira, André Wesley e Equipe
+ * Descrição: Implementação do ciclo de vida das threads de veículos, das lógicas
+ * de exclusão mútua na simulação e da estratégia
+ * anti-deadlock por meio de Look-Ahead estendido.
+ *
+ * Autores: Leôncio Ferreira e André Wesley.
  */
 
 static void calculate_next_position(char direction, int current_row,

@@ -13,7 +13,14 @@ void ambulance_request_path(Vehicle *v, Map *map, int target_row,
     return;
 
   if (map->cell_grid[target_row][target_col].type == INTERSECTION) {
-    traffic_request_priority(target_row, target_col, direction);
+    for (int i = target_row - 1; i <= target_row + 1; i++) {
+      for (int j = target_col - 1; j <= target_col + 1; j++) {
+        if (is_within_map_bounds(map, i, j) &&
+            map->cell_grid[i][j].type == INTERSECTION) {
+          traffic_request_priority(i, j, direction);
+        }
+      }
+    }
   }
 }
 
@@ -22,6 +29,21 @@ void ambulance_clear_path(Vehicle *v, Map *map, int prev_row, int prev_col) {
     return;
 
   if (map->cell_grid[prev_row][prev_col].type == INTERSECTION) {
-    traffic_release_priority(prev_row, prev_col);
+    bool current_is_intersection = false;
+    if (is_within_map_bounds(map, v->row, v->col)) {
+      current_is_intersection =
+          (map->cell_grid[v->row][v->col].type == INTERSECTION);
+    }
+
+    if (!current_is_intersection) {
+      for (int i = prev_row - 1; i <= prev_row + 1; i++) {
+        for (int j = prev_col - 1; j <= prev_col + 1; j++) {
+          if (is_within_map_bounds(map, i, j) &&
+              map->cell_grid[i][j].type == INTERSECTION) {
+            traffic_release_priority(i, j);
+          }
+        }
+      }
+    }
   }
 }

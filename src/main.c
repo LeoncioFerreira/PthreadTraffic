@@ -17,10 +17,10 @@
 #include <time.h>
 #include <unistd.h>
 
-#define NUM_VEHICLES 5
+#define NUM_VEHICLES 12
 
 /* Esta variável controla se o simulador continua rodando ou não */
-volatile bool keep_running = true;
+static volatile bool keep_running = true;
 
 /* Função chamada automaticamente quando o usuário aperta Ctrl+C no terminal */
 static void handle_shutdown_signal(int signal) {
@@ -72,8 +72,8 @@ int main() {
   clock_start(1000);
   traffic_start();
 
-  /* Cria e dispara a Frota de Veículos */
-  printf("[MAIN] Criando e ativando frota de veículos...\n");
+  /* Cria e dispara o Veículo de teste */
+  printf("[MAIN] Criando e ativando veículo de teste...\n");
 
   Vehicle *fleet[NUM_VEHICLES];
 
@@ -81,12 +81,38 @@ int main() {
   // Ex: Linha 3 (Leste), Linha 8 (Leste), Linha 13 (Leste), Linha 4 (Oeste),
   // Linha 9 (Oeste)
   const int start_positions[NUM_VEHICLES][2] = {
-      {3, 0}, {8, 0}, {13, 0}, {4, 42}, {9, 42}};
+      {3, 0},   // Leste (linha 3)
+      {4, 42},  // Oeste (linha 4)
+      {8, 0},   // Leste (linha 8)
+      {9, 42},  // Oeste (linha 9)
+      {13, 0},  // Leste (linha 13)
+      {14, 42}, // Oeste (linha 14)
+      {17, 7},  // Norte (coluna 7)
+      {0, 8},   // Sul (coluna 8)
+      {17, 16}, // Norte (coluna 16)
+      {0, 17},  // Sul (coluna 17)
+      {17, 25}, // Norte (coluna 25)
+      {0, 26}   // Sul (coluna 26)
+  };
 
   for (int i = 0; i < NUM_VEHICLES; i++) {
-    // Passamos o tipo NORMAL_CAR (ou FAST_CAR se preferir)
-    fleet[i] = vehicle_create_and_start(
-        i + 1, start_positions[i][0], start_positions[i][1], 1, FAST_CAR, mapa);
+    VehicleType type = FAST_CAR;
+    int speed_ticks = 1;
+
+    if (i <= 4) {
+      type = FAST_CAR;
+      speed_ticks = 1;
+    } else if (i > 4 && i <= 8) {
+      type = MEDIUM_CAR;
+      speed_ticks = 2;
+    } else {
+      type = SLOW_CAR;
+      speed_ticks = 4;
+    }
+
+    fleet[i] = vehicle_create_and_start(i + 1, start_positions[i][0],
+                                        start_positions[i][1], speed_ticks,
+                                        type, mapa);
 
     if (fleet[i] == NULL) {
       fprintf(stderr, "[MAIN] ERRO: Falha ao criar o veículo %d.\n", i + 1);
@@ -107,27 +133,25 @@ int main() {
   }
 
   printf("[MAIN] Encerrando recursos de forma segura...\n");
+  clock_stop();
 
-  printf("[MAIN] Parando o subsistema de visualização...\n");
+  traffic_stop();
+
   display_stop();
 
-  printf("[MAIN] Parando e destruindo o subsistema de semáforos...\n");
-  traffic_stop();
-  traffic_destroy();
-
-  printf("[MAIN] Parando e destruindo o relógio...\n");
-  clock_stop();
-  clock_destroy();
-
-  /* Libera a frota de veículos de forma segura */
-  printf("[MAIN] Liberando memória dos veículos...\n");
+  printf("[MAIN] Finalizando a thread do veículo de teste de forma segura...\n");
   for (int i = 0; i < NUM_VEHICLES; i++) {
     if (fleet[i] != NULL) {
       vehicle_destroy(fleet[i]);
     }
   }
 
-  /* 3. Libera a memória do mapa */
+  printf("[MAIN] Parando e destruindo o subsistema de semáforos...\n");
+  traffic_destroy();
+
+  printf("[MAIN] Parando e destruindo o relógio...\n");
+  clock_destroy();
+
   printf("[MAIN] Destruindo a estrutura do mapa...\n");
   destroy(mapa);
 

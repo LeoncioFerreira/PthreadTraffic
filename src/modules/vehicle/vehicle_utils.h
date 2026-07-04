@@ -5,7 +5,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-void vehicle_exit_map_cleanup(Vehicle *vehicle, Map *map, bool owns_exit_lock,
+void vehicle_exit_map_cleanup(Vehicle *vehicle, Map *map,
+                              bool owns_current_lock, bool owns_exit_lock,
                               int locked_exit_row, int locked_exit_col);
 
 bool vehicle_try_reserve_movement(Vehicle *vehicle, Map *map, int next_row,

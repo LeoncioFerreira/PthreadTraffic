@@ -1,5 +1,8 @@
 #include "traffic.h"
 #include "../clock/clock.h"
+#include <bits/pthreadtypes.h>
+#include <pthread.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -7,12 +10,15 @@
  * Descrição: Esse arquivo implementa a thread que gerencia os semáforos,
  * alternando os sinais entre as direções ao ritmo do relógio global. Também
  * fornece mecanismos  para barrar os carros no sinal vermelho e acordá-los com
- * segurança quando o sinal abrir. Autor: Paulo
+ * segurança quando o sinal abrir. Autor: Paulo e Leôncio Ferreira
  */
 static TrafficLight *lights = NULL;
 static int num_lights = 0;
 static pthread_t manager_thread;
 static volatile bool keep_traffic_running = false;
+
+// Declaração prévia (forward declaration) para uso na thread
+static LightState compute_light_state(const TrafficLight *tl, uint64_t tick);
 
 // por que a dir do carro pode ser símbolo e direção ? tipo ser L ou <
 static bool is_allowed(LightState state, char dir) {
@@ -52,15 +58,15 @@ static void *traffic_manager_routine(void *arg) {
     for (int i = 0; i < num_lights; i++) {
       TrafficLight *tl = &lights[i];
 
-      if (current_tick % (uint64_t)tl->toggle_ticks == 0) {
+      // Adiciona o ID do semáforo como deslocamento (offset) para
+      // dessincronizar
+      if ((current_tick + (uint64_t)tl->id) % (uint64_t)tl->toggle_ticks == 0) {
         pthread_mutex_lock(&tl->mutex);
 
-        if (tl->state == LIGHT_HORIZ_GREEN) {
+        // Garante que o estado real bata 100% com a fórmula matemática
+        // (compute_light_state)
+        tl->state = compute_light_state(tl, current_tick);
 
-          tl->state = LIGHT_VERT_GREEN;
-        } else {
-          tl->state = LIGHT_HORIZ_GREEN;
-        }
         pthread_cond_broadcast(&tl->cond);
         pthread_mutex_unlock(&tl->mutex);
       }
@@ -95,7 +101,18 @@ void traffic_wait_for_green(int row, int col, char vehicle_dir) {
 // Calcula o estado do semáforo deterministicamente a partir do tick,
 // sem depender da thread do semáforo (elimina race condition).
 static LightState compute_light_state(const TrafficLight *tl, uint64_t tick) {
-  uint64_t phase = (tick / (uint64_t)tl->toggle_ticks) % 2;
+
+  // Prioridade da Ambulância, força a cor do sinal
+  if (tl->priority_active) {
+    if (tl->priority_dir == 'L' || tl->priority_dir == '>' ||
+        tl->priority_dir == 'O' || tl->priority_dir == '<') {
+      return LIGHT_HORIZ_GREEN;
+    } else {
+      return LIGHT_VERT_GREEN;
+    }
+  }
+  // Comportamento normal do relógio com offset para dessincronizar
+  uint64_t phase = ((tick + (uint64_t)tl->id) / (uint64_t)tl->toggle_ticks) % 2;
   return (phase == 0) ? LIGHT_HORIZ_GREEN : LIGHT_VERT_GREEN;
 }
 
@@ -201,4 +218,43 @@ void traffic_destroy(void) {
   free(lights);
   lights = NULL;
   num_lights = 0;
+}
+
+void traffic_request_priority(int row, int col, char direction) {
+  TrafficLight *tl = get_light_at(row, col);
+  if (!tl)
+    return;
+
+  pthread_mutex_lock(&tl->mutex);
+  tl->priority_active = true;
+  tl->priority_dir = direction;
+
+  pthread_cond_broadcast(&tl->cond);
+
+  pthread_mutex_unlock(&tl->mutex);
+}
+
+void traffic_release_priority(int row, int col) {
+  TrafficLight *tl = get_light_at(row, col);
+  if (!tl)
+    return;
+
+  pthread_mutex_lock(&tl->mutex);
+
+  tl->priority_active = false;
+
+  pthread_cond_broadcast(&tl->cond);
+
+  pthread_mutex_unlock(&tl->mutex);
+}
+
+bool traffic_is_priority_active(void) {
+  if (!lights)
+    return false;
+  for (int i = 0; i < num_lights; i++) {
+    if (lights[i].priority_active) {
+      return true;
+    }
+  }
+  return false;
 }

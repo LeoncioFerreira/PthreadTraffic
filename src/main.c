@@ -67,6 +67,18 @@ int main() {
   printf("Mapa carregado com sucesso! Dimensões: %d linhas x %d colunas\n",
          mapa->rows, mapa->columns);
 
+  printf("\n==========================================\n");
+  printf("    LEGENDA DA SIMULACAO:\n");
+  printf("==========================================\n");
+  printf("[\033[1;31mC\033[0m] Carro Civil Normal\n");
+  printf("[\033[5;34mA\033[0m] Ambulancia (Tem prioridade!)\n");
+  printf("[\033[32m-\033[0m] Semaforo: Verde para via Horizontal\n");
+  printf("[\033[32m|\033[0m] Semaforo: Verde para via Vertical\n\n");
+
+  printf("A interface visual ira iniciar em 5 segundos...\n");
+  fflush(stdout);
+  sleep(5);
+
   /* Dispara a thread do Relógio */
   printf("[MAIN] Ativando a thread do Relógio...\n");
   clock_start(1000);
@@ -99,7 +111,10 @@ int main() {
     VehicleType type = FAST_CAR;
     int speed_ticks = 1;
 
-    if (i <= 4) {
+    if (i == 0) {
+      type = AMBULANCE;
+      speed_ticks = 1; // Ambulância é rápida
+    } else if (i > 0 && i <= 4) {
       type = FAST_CAR;
       speed_ticks = 1;
     } else if (i > 4 && i <= 8) {

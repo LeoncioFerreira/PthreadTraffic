@@ -2,6 +2,7 @@
 #define MAP_H
 
 #include <pthread.h>
+#include <stdbool.h>
 /**
  * Descrição: Define as principais estruturas de dados necessárias para o
  * funcionamento do mapa, como o tipo de terreno (CellType), a célula (Cell -
@@ -35,5 +36,8 @@ typedef struct map {
 
 Map *load_map(const char *path_file);
 void destroy(Map *mapa);
+
+// Utilitários de navegação e limites do mapa
+bool is_within_map_bounds(const Map *map, int row, int col);
 
 #endif

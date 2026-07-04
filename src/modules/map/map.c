@@ -1,5 +1,4 @@
 #include "map.h"
-#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -183,4 +182,8 @@ void destroy(Map *mapa) {
   free(mapa->cell_grid);
 
   free(mapa);
+}
+
+bool is_within_map_bounds(const Map *map, int row, int col) {
+  return (row >= 0 && row < map->rows && col >= 0 && col < map->columns);
 }

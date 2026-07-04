@@ -139,7 +139,8 @@ int main() {
 
   display_stop();
 
-  printf("[MAIN] Finalizando a thread do veículo de teste de forma segura...\n");
+  printf(
+      "[MAIN] Finalizando a thread do veículo de teste de forma segura...\n");
   for (int i = 0; i < NUM_VEHICLES; i++) {
     if (fleet[i] != NULL) {
       vehicle_destroy(fleet[i]);

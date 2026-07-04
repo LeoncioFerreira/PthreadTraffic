@@ -43,7 +43,6 @@ void *vehicle_lifecycle(void *arg) {
       continue;
     }
 
-
     int next_row, next_col;
     if (!vehicle_choose_next_position(vehicle, map, current_tick,
                                       &current_direction, &last_valid_direction,

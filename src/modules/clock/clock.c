@@ -2,6 +2,7 @@
  * Descrição: Implementação do módulo de relógio. Contém a thread principal do
  * relógio que notifica ativamente (via broadcast) todas as threads
  * dependentes a cada "tick".
+ * Autores: André Wesley e Salomão Rodrigues
  */
 
 #include "clock.h"
@@ -91,4 +92,17 @@ bool clock_is_running(void) {
   running = is_running;
   pthread_mutex_unlock(&clock_mutex);
   return running;
+}
+
+uint64_t clock_wait_for_tick() {
+  pthread_mutex_lock(&clock_mutex);
+  if (!is_running) {
+    uint64_t current_tick = global_tick;
+    pthread_mutex_unlock(&clock_mutex);
+    return current_tick;
+  }
+  pthread_cond_wait(&clock_cond, &clock_mutex);
+  uint64_t current_tick = global_tick;
+  pthread_mutex_unlock(&clock_mutex);
+  return current_tick;
 }

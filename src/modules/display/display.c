@@ -33,7 +33,7 @@ static void *display_routine(void *arg) {
         Cell current = shared_map->cell_grid[i][j];
 
         if (current.current_vehicle != NULL) {
-          // Carro normal em vermelho
+          // Carro normal (vermelho)
           printf("\033[1;31mC\033[0m");
         } else {
           if (current.type == EMPTY) {
@@ -47,8 +47,8 @@ static void *display_routine(void *arg) {
               // VERDE: horizontal (← →) pode passar
               printf("\033[32m+\033[0m");
             } else {
-              // AMARELO: vertical (↑ ↓) pode passar
-              printf("\033[33m+\033[0m");
+              // VERMELHO: vertical (↑ ↓) pode passar, horizontal fechado
+              printf("\033[31m+\033[0m");
             }
           } else {
             printf("%c", current.direction);

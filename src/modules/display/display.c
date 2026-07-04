@@ -44,8 +44,8 @@ static void *display_routine(void *arg) {
           "\033[1;33m[ALERTA] Prioridade MAXIMA! Ambulancia forcando a "
           "passagem num cruzamento!\033[0m\n");
     } else {
-      offset += snprintf(frame_buffer + offset, sizeof(frame_buffer) - offset,
-                         "\n");
+      offset +=
+          snprintf(frame_buffer + offset, sizeof(frame_buffer) - offset, "\n");
     }
 
     // Varre e desenha o mapa

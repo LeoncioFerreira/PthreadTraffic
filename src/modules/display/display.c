@@ -1,6 +1,7 @@
 #include "display.h"
 #include "../clock/clock.h"
 #include "../traffic/traffic.h"
+#include "../vehicle/vehicle.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,8 +24,30 @@ static void *display_routine(void *arg) {
 
     printf("\033[H\033[J");
 
-    printf("=== SIMULADOR DE TRAFEGO PTHREAD === (Tick: %lu)\n\n",
-           display_tick);
+    printf("=== SIMULADOR DE TRAFEGO PTHREAD === (Tick: %lu)\n", display_tick);
+
+    // Legenda dos símbolos para o professor
+    printf("Legenda: [\033[1;31mC\033[0m] Carro | "
+           "[\033[5;34mA\033[0m] Ambulancia | "
+           "[\033[32m-\033[0m] Verde Horizontal | "
+           "[\033[32m|\033[0m] Verde Vertical\n");
+
+    // Alerta visual de prioridade da ambulância
+    if (traffic_is_priority_active()) {
+      printf("\033[1;33m[ALERTA] Prioridade MAXIMA! Ambulancia forcando a "
+             "passagem "
+             "num cruzamento!\033[0m\n\n");
+    } else {
+      printf("\n\n");
+    }
+
+    // Alerta visual de prioridade da ambulância
+    if (traffic_is_priority_active()) {
+      printf("\033[1;33m[ALERTA] Prioridade MAXIMA! Ambulancia forcando a "
+             "passagem num cruzamento!\033[0m\n\n");
+    } else {
+      printf("\n\n");
+    }
 
     // Varre e desenha o mapa
     for (int i = 0; i < shared_map->rows; i++) {
@@ -33,8 +56,12 @@ static void *display_routine(void *arg) {
         Cell current = shared_map->cell_grid[i][j];
 
         if (current.current_vehicle != NULL) {
-          // Carro normal (vermelho)
-          printf("\033[1;31mC\033[0m");
+          if (current.current_vehicle->type == AMBULANCE) {
+            printf("\033[5;34mA\033[0m");
+          } else {
+            // Carro normal (vermelho)
+            printf("\033[1;31mC\033[0m");
+          }
         } else {
           if (current.type == EMPTY) {
             printf(" ");

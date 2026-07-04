@@ -14,7 +14,8 @@
 typedef enum {
   FAST_CAR,   // Move a cada 1 tick
   MEDIUM_CAR, // Move a cada 2 ticks
-  SLOW_CAR    // Move a cada 4 ticks
+  SLOW_CAR,   // Move a cada 4 ticks
+  AMBULANCE   // Ambulância
 } VehicleType;
 
 typedef struct Vehicle {

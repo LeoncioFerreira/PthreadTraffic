@@ -1,4 +1,5 @@
 #include "vehicle.h"
+#include "../ambulance/ambulance.h"
 #include "../clock/clock.h"
 #include "vehicle_utils.h"
 #include <stdlib.h>
@@ -56,6 +57,9 @@ void *vehicle_lifecycle(void *arg) {
 
     if (is_within_map_bounds(map, next_row, next_col)) {
       int exit_row = -1, exit_col = -1;
+      // Ambulância pede passagem antes de tentar reservar
+      ambulance_request_path(vehicle, map, next_row, next_col,
+                             current_direction);
 
       if (!vehicle_try_reserve_movement(
               vehicle, map, next_row, next_col, current_direction, current_tick,
@@ -67,11 +71,15 @@ void *vehicle_lifecycle(void *arg) {
       bool target_is_intersection =
           (map->cell_grid[next_row][next_col].type == INTERSECTION);
 
+      int old_row = vehicle->row;
+      int old_col = vehicle->col;
+
       vehicle_perform_move(vehicle, map, next_row, next_col,
                            target_is_intersection, exit_row, exit_col,
                            &current_owns_exit_lock, &locked_exit_row,
                            &locked_exit_col);
 
+      ambulance_clear_path(vehicle, map, old_row, old_col);
     } else {
       vehicle_exit_map_cleanup(vehicle, map, current_owns_exit_lock,
                                locked_exit_row, locked_exit_col);

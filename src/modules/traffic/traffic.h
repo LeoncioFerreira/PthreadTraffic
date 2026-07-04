@@ -22,6 +22,8 @@ typedef struct {
   LightState state;
   int toggle_ticks;
 
+  bool priority_active;
+  char priority_dir;
   pthread_mutex_t mutex;
   pthread_cond_t cond;
 } TrafficLight;
@@ -40,5 +42,22 @@ bool traffic_is_green(int row, int col, char vehicle_dir);
 
 bool traffic_is_safe_to_enter(int row, int col, char vehicle_dir,
                               uint64_t current_tick);
+
+/**
+ * Solicita que o semáforo libere passagem imediata para a direção informada.
+ * Utilizado primariamente por veículos de emergência (AMBULANCE).
+ */
+void traffic_request_priority(int row, int col, char direction);
+
+/**
+ * Libera a prioridade do semáforo, devolvendo o controle normal da interseção.
+ */
+void traffic_release_priority(int row, int col);
+
+/**
+ * Retorna true se houver algum semáforo com prioridade forçada no mapa atual.
+ * Utilizado pelo módulo de Display para piscar alertas de log.
+ */
+bool traffic_is_priority_active(void);
 
 #endif

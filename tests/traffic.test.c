@@ -5,16 +5,31 @@
  */
 
 #include "../src/modules/traffic/traffic.h"
+#include "../src/modules/clock/clock.h"
 #include "../src/modules/map/map.h"
 #include "vendor/unity.h"
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 volatile bool keep_running = true;
 
 static Map *test_map = NULL;
+static pthread_t wait_thread;
+static volatile bool wait_finished = false;
+static bool traffic_started = false;
+
+static void *wait_for_vertical_green(void *arg) {
+  (void)arg;
+  traffic_wait_for_green(1, 1, 'N');
+  wait_finished = true;
+  return NULL;
+}
 
 void setUp(void) {
+  clock_init();
+  traffic_started = false;
 
   test_map = (Map *)malloc(sizeof(Map));
   if (test_map == NULL) {
@@ -41,8 +56,14 @@ void setUp(void) {
 }
 
 void tearDown(void) {
-  traffic_stop();
+  if (traffic_started) {
+    traffic_stop();
+  }
+  if (clock_is_running()) {
+    clock_stop();
+  }
   traffic_destroy();
+  clock_destroy();
 
   // Limpa a memória do mapa falso
   for (int i = 0; i < 3; i++) {
@@ -86,12 +107,35 @@ void test_traffic_ignores_non_intersection(void) {
       "Células sem cruzamento devem sempre retornar verde (true)");
 }
 
+void test_traffic_wait_for_green_blocks_until_signal_changes(void) {
+  wait_finished = false;
+
+  traffic_start();
+  traffic_started = true;
+  pthread_create(&wait_thread, NULL, wait_for_vertical_green, NULL);
+
+  usleep(20000);
+  TEST_ASSERT_FALSE_MESSAGE(wait_finished,
+                            "A thread nao deveria atravessar enquanto o "
+                            "semaforo vertical esta vermelho.");
+
+  clock_start(10);
+  usleep(70000);
+
+  pthread_join(wait_thread, NULL);
+
+  TEST_ASSERT_TRUE_MESSAGE(
+      wait_finished,
+      "A thread deveria ser liberada apos o semaforo trocar para verde.");
+}
+
 int main(void) {
   UNITY_BEGIN();
 
   RUN_TEST(test_traffic_starts_horizontal_green);
   RUN_TEST(test_traffic_starts_vertical_red);
   RUN_TEST(test_traffic_ignores_non_intersection);
+  RUN_TEST(test_traffic_wait_for_green_blocks_until_signal_changes);
 
   return UNITY_END();
 }

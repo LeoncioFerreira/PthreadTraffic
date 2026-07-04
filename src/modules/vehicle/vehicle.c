@@ -1,6 +1,8 @@
 #include "vehicle.h"
 #include "../ambulance/ambulance.h"
 #include "../clock/clock.h"
+#include "../navigation/navigation.h"
+#include "../traffic/traffic.h"
 #include "vehicle_utils.h"
 #include <stdlib.h>
 
@@ -35,7 +37,7 @@ void *vehicle_lifecycle(void *arg) {
     uint64_t current_tick = clock_wait_for_tick();
 
     if (!clock_is_running()) {
-      vehicle_exit_map_cleanup(vehicle, map, current_owns_exit_lock,
+      vehicle_exit_map_cleanup(vehicle, map, true, current_owns_exit_lock,
                                locked_exit_row, locked_exit_col);
       break;
     }
@@ -57,9 +59,30 @@ void *vehicle_lifecycle(void *arg) {
 
     if (is_within_map_bounds(map, next_row, next_col)) {
       int exit_row = -1, exit_col = -1;
+      bool target_is_intersection =
+          (map->cell_grid[next_row][next_col].type == INTERSECTION);
+
       // Ambulância pede passagem antes de tentar reservar
       ambulance_request_path(vehicle, map, next_row, next_col,
                              current_direction);
+
+      bool current_is_intersection =
+          (map->cell_grid[vehicle->row][vehicle->col].type == INTERSECTION);
+
+      if (target_is_intersection && !current_is_intersection &&
+          !traffic_is_safe_to_enter(next_row, next_col, current_direction,
+                                    current_tick)) {
+        traffic_wait_for_green(next_row, next_col, current_direction);
+        if (!clock_is_running()) {
+          vehicle_exit_map_cleanup(vehicle, map, true, current_owns_exit_lock,
+                                   locked_exit_row, locked_exit_col);
+          break;
+        }
+        /* Atualiza o tick após a espera */
+        pthread_mutex_lock(&clock_mutex);
+        current_tick = global_tick;
+        pthread_mutex_unlock(&clock_mutex);
+      }
 
       if (!vehicle_try_reserve_movement(
               vehicle, map, next_row, next_col, current_direction, current_tick,
@@ -67,9 +90,6 @@ void *vehicle_lifecycle(void *arg) {
               &exit_row, &exit_col)) {
         continue;
       }
-
-      bool target_is_intersection =
-          (map->cell_grid[next_row][next_col].type == INTERSECTION);
 
       int old_row = vehicle->row;
       int old_col = vehicle->col;
@@ -81,7 +101,7 @@ void *vehicle_lifecycle(void *arg) {
 
       ambulance_clear_path(vehicle, map, old_row, old_col);
     } else {
-      vehicle_exit_map_cleanup(vehicle, map, current_owns_exit_lock,
+      vehicle_exit_map_cleanup(vehicle, map, true, current_owns_exit_lock,
                                locked_exit_row, locked_exit_col);
       break;
     }
@@ -109,10 +129,14 @@ Vehicle *vehicle_create_and_start(int id, int start_row, int start_col,
     free(vehicle);
     return NULL;
   }
+  map->cell_grid[start_row][start_col].current_vehicle = vehicle;
   pthread_mutex_unlock(&map->cell_grid[start_row][start_col].mutex);
 
   if (pthread_create(&vehicle->thread_id, NULL, vehicle_lifecycle,
                      (void *)vehicle) != 0) {
+    pthread_mutex_lock(&map->cell_grid[start_row][start_col].mutex);
+    map->cell_grid[start_row][start_col].current_vehicle = NULL;
+    pthread_mutex_unlock(&map->cell_grid[start_row][start_col].mutex);
     free(vehicle);
     return NULL;
   }

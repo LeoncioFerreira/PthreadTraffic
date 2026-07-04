@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -pthread -Iinclude -Itests/vendor -Isrc
+CFLAGS = -Wall -Wextra -pthread -g -Iinclude -Itests/vendor -Isrc
 LDFLAGS = -pthread
 
 # Diretórios

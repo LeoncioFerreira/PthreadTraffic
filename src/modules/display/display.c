@@ -22,68 +22,91 @@ static void *display_routine(void *arg) {
     if (!keep_display_running)
       break;
 
-    printf("\033[H\033[J");
+    char frame_buffer[32768];
+    int offset = 0;
 
-    printf("=== SIMULADOR DE TRAFEGO PTHREAD === (Tick: %lu)\n", display_tick);
+    offset += snprintf(frame_buffer + offset, sizeof(frame_buffer) - offset,
+                       "\033[H\033[J");
+    offset += snprintf(frame_buffer + offset, sizeof(frame_buffer) - offset,
+                       "=== SIMULADOR DE TRAFEGO PTHREAD === (Tick: %lu)\n",
+                       display_tick);
 
-    // Legenda dos símbolos para o professor
-    printf("Legenda: [\033[1;31mC\033[0m] Carro | "
-           "[\033[5;34mA\033[0m] Ambulancia | "
-           "[\033[32m-\033[0m] Verde Horizontal | "
-           "[\033[32m|\033[0m] Verde Vertical\n");
-
-    // Alerta visual de prioridade da ambulância
-    if (traffic_is_priority_active()) {
-      printf("\033[1;33m[ALERTA] Prioridade MAXIMA! Ambulancia forcando a "
-             "passagem "
-             "num cruzamento!\033[0m\n\n");
-    } else {
-      printf("\n\n");
-    }
+    offset += snprintf(frame_buffer + offset, sizeof(frame_buffer) - offset,
+                       "Legenda: [\033[1;31mC\033[0m] Carro | "
+                       "[\033[5;34mA\033[0m] Ambulancia | "
+                       "[\033[32m-\033[0m] Verde Horizontal | "
+                       "[\033[32m|\033[0m] Verde Vertical\n");
 
     // Alerta visual de prioridade da ambulância
     if (traffic_is_priority_active()) {
-      printf("\033[1;33m[ALERTA] Prioridade MAXIMA! Ambulancia forcando a "
-             "passagem num cruzamento!\033[0m\n\n");
+      offset += snprintf(
+          frame_buffer + offset, sizeof(frame_buffer) - offset,
+          "\033[1;33m[ALERTA] Prioridade MAXIMA! Ambulancia forcando a "
+          "passagem num cruzamento!\033[0m\n");
     } else {
-      printf("\n\n");
+      offset += snprintf(frame_buffer + offset, sizeof(frame_buffer) - offset,
+                         "\n");
     }
 
     // Varre e desenha o mapa
     for (int i = 0; i < shared_map->rows; i++) {
       for (int j = 0; j < shared_map->columns; j++) {
+        CellType cell_type;
+        char cell_direction;
+        Vehicle *current_vehicle;
 
-        Cell current = shared_map->cell_grid[i][j];
+        if (pthread_mutex_trylock(&shared_map->cell_grid[i][j].mutex) == 0) {
+          cell_type = shared_map->cell_grid[i][j].type;
+          cell_direction = shared_map->cell_grid[i][j].direction;
+          current_vehicle = shared_map->cell_grid[i][j].current_vehicle;
+          pthread_mutex_unlock(&shared_map->cell_grid[i][j].mutex);
+        } else {
+          cell_type = shared_map->cell_grid[i][j].type;
+          cell_direction = shared_map->cell_grid[i][j].direction;
+          current_vehicle = shared_map->cell_grid[i][j].current_vehicle;
+        }
 
-        if (current.current_vehicle != NULL) {
-          if (current.current_vehicle->type == AMBULANCE) {
-            printf("\033[5;34mA\033[0m");
+        if (current_vehicle != NULL) {
+          if (current_vehicle->type == AMBULANCE) {
+            offset +=
+                snprintf(frame_buffer + offset, sizeof(frame_buffer) - offset,
+                         "\033[5;34mA\033[0m");
           } else {
             // Carro normal (vermelho)
-            printf("\033[1;31mC\033[0m");
+            offset +=
+                snprintf(frame_buffer + offset, sizeof(frame_buffer) - offset,
+                         "\033[1;31mC\033[0m");
           }
         } else {
-          if (current.type == EMPTY) {
-            printf(" ");
-          } else if (current.type == INTERSECTION) {
+          if (cell_type == EMPTY) {
+            offset += snprintf(frame_buffer + offset,
+                               sizeof(frame_buffer) - offset, " ");
+          } else if (cell_type == INTERSECTION) {
             // Garante consistência com o que os veículos viram neste tick.
             bool is_green_for_horizontal =
                 traffic_is_safe_to_enter(i, j, '>', display_tick);
-
             if (is_green_for_horizontal) {
               // VERDE: horizontal (← →) pode passar
-              printf("\033[32m+\033[0m");
+              offset +=
+                  snprintf(frame_buffer + offset, sizeof(frame_buffer) - offset,
+                           "\033[32m-\033[0m");
             } else {
               // VERMELHO: vertical (↑ ↓) pode passar, horizontal fechado
-              printf("\033[31m+\033[0m");
+              offset +=
+                  snprintf(frame_buffer + offset, sizeof(frame_buffer) - offset,
+                           "\033[32m|\033[0m");
             }
           } else {
-            printf("%c", current.direction);
+            offset +=
+                snprintf(frame_buffer + offset, sizeof(frame_buffer) - offset,
+                         "%c", cell_direction);
           }
         }
       }
-      printf("\n");
+      offset +=
+          snprintf(frame_buffer + offset, sizeof(frame_buffer) - offset, "\n");
     }
+    printf("%s", frame_buffer);
     fflush(stdout); // Força a atualização da tela imediatamente
   }
   return NULL;

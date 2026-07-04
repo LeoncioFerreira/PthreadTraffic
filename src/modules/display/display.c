@@ -35,6 +35,15 @@ static void *display_routine(void *arg) {
     // Alerta visual de prioridade da ambulância
     if (traffic_is_priority_active()) {
       printf("\033[1;33m[ALERTA] Prioridade MAXIMA! Ambulancia forcando a "
+             "passagem "
+             "num cruzamento!\033[0m\n\n");
+    } else {
+      printf("\n\n");
+    }
+
+    // Alerta visual de prioridade da ambulância
+    if (traffic_is_priority_active()) {
+      printf("\033[1;33m[ALERTA] Prioridade MAXIMA! Ambulancia forcando a "
              "passagem num cruzamento!\033[0m\n\n");
     } else {
       printf("\n\n");
@@ -63,10 +72,10 @@ static void *display_routine(void *arg) {
 
             if (is_green_for_horizontal) {
               // VERDE: horizontal (← →) pode passar
-              printf("\033[32m-\033[0m");
+              printf("\033[32m+\033[0m");
             } else {
-              // VERDE: vertical (↑ ↓) pode passar, horizontal fechado
-              printf("\033[32m|\033[0m");
+              // VERMELHO: vertical (↑ ↓) pode passar, horizontal fechado
+              printf("\033[31m+\033[0m");
             }
           } else {
             printf("%c", current.direction);

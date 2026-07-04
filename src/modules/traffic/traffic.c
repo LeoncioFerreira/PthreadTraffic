@@ -92,16 +92,35 @@ void traffic_wait_for_green(int row, int col, char vehicle_dir) {
   }
   pthread_mutex_unlock(&tl->mutex);
 }
+// Calcula o estado do semáforo deterministicamente a partir do tick,
+// sem depender da thread do semáforo (elimina race condition).
+static LightState compute_light_state(const TrafficLight *tl, uint64_t tick) {
+  uint64_t phase = (tick / (uint64_t)tl->toggle_ticks) % 2;
+  return (phase == 0) ? LIGHT_HORIZ_GREEN : LIGHT_VERT_GREEN;
+}
+
 bool traffic_is_green(int row, int col, char vehicle_dir) {
   TrafficLight *tl = get_light_at(row, col);
   if (!tl) {
     return true;
   }
-  pthread_mutex_lock(&tl->mutex);
-  bool allowed = is_allowed(tl->state, vehicle_dir);
-  pthread_mutex_unlock(&tl->mutex);
+  // Usa global_tick para o display (que não passa tick)
+  pthread_mutex_lock(&clock_mutex);
+  uint64_t tick = global_tick;
+  pthread_mutex_unlock(&clock_mutex);
 
-  return allowed;
+  LightState state = compute_light_state(tl, tick);
+  return is_allowed(state, vehicle_dir);
+}
+
+bool traffic_is_safe_to_enter(int row, int col, char vehicle_dir,
+                              uint64_t current_tick) {
+  TrafficLight *tl = get_light_at(row, col);
+  if (!tl) {
+    return true;
+  }
+  LightState state = compute_light_state(tl, current_tick);
+  return is_allowed(state, vehicle_dir);
 }
 
 void traffic_init(const Map *map, int default_toggle_ticks) {

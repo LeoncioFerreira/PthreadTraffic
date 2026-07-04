@@ -1,6 +1,7 @@
 /**
  * Descrição: Definição do módulo de relógio responsável por gerenciar o tempo
  * global da simulação e orquestrar a sincronização temporal entre as threads.
+ * Autores: André Wesley e Salomão Rodrigues
  */
 
 #ifndef CLOCK_H
@@ -39,5 +40,6 @@ void clock_destroy(void);
  * Retorna se o relógio ainda está em execução de forma thread-safe.
  */
 bool clock_is_running(void);
+uint64_t clock_wait_for_tick(void);
 
 #endif /* CLOCK_H */

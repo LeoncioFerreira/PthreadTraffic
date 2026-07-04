@@ -4,6 +4,7 @@
 #include "../map/map.h"
 #include <pthread.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 /**
  * Descrição: Definição das estruturas de dados do subsistema de semáforos,
@@ -36,5 +37,8 @@ void traffic_destroy(void);
 void traffic_wait_for_green(int row, int col, char vehicle_dir);
 
 bool traffic_is_green(int row, int col, char vehicle_dir);
+
+bool traffic_is_safe_to_enter(int row, int col, char vehicle_dir,
+                              uint64_t current_tick);
 
 #endif

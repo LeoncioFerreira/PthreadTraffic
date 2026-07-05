@@ -15,6 +15,11 @@
 void vehicle_exit_map_cleanup(Vehicle *vehicle, Map *map, bool owns_exit_lock,
                               int locked_exit_row, int locked_exit_col) {
   map->cell_grid[vehicle->row][vehicle->col].current_vehicle = NULL;
+
+  if (map->cell_grid[vehicle->row][vehicle->col].type == INTERSECTION) {
+    traffic_release_capacity(vehicle->row, vehicle->col);
+  }
+
   pthread_mutex_unlock(&map->cell_grid[vehicle->row][vehicle->col].mutex);
   if (owns_exit_lock &&
       is_within_map_bounds(map, locked_exit_row, locked_exit_col)) {
@@ -54,6 +59,16 @@ bool vehicle_try_reserve_movement(Vehicle *vehicle, Map *map, int next_row,
       }
       return false;
     }
+
+    if (!already_owns_target_lock &&
+        !traffic_try_enter_capacity(next_row, next_col)) {
+      pthread_mutex_unlock(&map->cell_grid[next_row][next_col].mutex);
+      /* exit_cell foi reservada em deadlock_try_reserve_exit_cell; libera */
+      if (is_within_map_bounds(map, *exit_row, *exit_col)) {
+        pthread_mutex_unlock(&map->cell_grid[*exit_row][*exit_col].mutex);
+      }
+      return false;
+    }
   } else {
     bool already_owns_target_lock =
         (owns_exit_lock && next_row == locked_exit_row &&
@@ -82,6 +97,10 @@ void vehicle_perform_move(Vehicle *vehicle, Map *map, int next_row,
 
   vehicle->row = next_row;
   vehicle->col = next_col;
+
+  if (map->cell_grid[previous_row][previous_col].type == INTERSECTION) {
+    traffic_release_capacity(previous_row, previous_col);
+  }
 
   pthread_mutex_unlock(&map->cell_grid[previous_row][previous_col].mutex);
 

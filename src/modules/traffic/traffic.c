@@ -1,7 +1,7 @@
 #include "traffic.h"
 #include "../clock/clock.h"
-#include <bits/pthreadtypes.h>
 #include <pthread.h>
+#include <semaphore.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,65 +9,90 @@
 /**
  * Descrição: Esse arquivo implementa a thread que gerencia os semáforos,
  * alternando os sinais entre as direções ao ritmo do relógio global. Também
- * fornece mecanismos  para barrar os carros no sinal vermelho e acordá-los com
- * segurança quando o sinal abrir. Autor: Paulo e Leôncio Ferreira
+ * fornece mecanismos para barrar os carros no sinal vermelho e acordá-los com
+ * segurança quando o sinal abrir.
+ * Autor: Paulo e Leôncio Ferreira
+
  */
+
 static TrafficLight *lights = NULL;
 static int num_lights = 0;
 static pthread_t manager_thread;
 static volatile bool keep_traffic_running = false;
 
-// Declaração prévia (forward declaration) para uso na thread
+/* Forward declaration */
 static LightState compute_light_state(const TrafficLight *tl, uint64_t tick);
 
-// por que a dir do carro pode ser símbolo e direção ? tipo ser L ou <
+/* Retorna true se a direção é horizontal (Leste ou Oeste) */
+static bool is_horizontal_dir(char dir) {
+  return (dir == 'L' || dir == '>' || dir == 'O' || dir == '<');
+}
+
+/* Retorna true se a direção é vertical (Norte ou Sul) */
+static bool is_vertical_dir(char dir) {
+  return (dir == 'N' || dir == '^' || dir == 'S' || dir == 'v');
+}
+
 static bool is_allowed(LightState state, char dir) {
-  if (state == LIGHT_HORIZ_GREEN &&
-      (dir == 'L' || dir == '>' || dir == 'O' || dir == '<')) {
+  if (state == LIGHT_HORIZ_GREEN && is_horizontal_dir(dir))
     return true;
-  }
-
-  if (state == LIGHT_VERT_GREEN &&
-      (dir == 'N' || dir == '^' || dir == 'S' || dir == 'v')) {
+  if (state == LIGHT_VERT_GREEN && is_vertical_dir(dir))
     return true;
-  }
-
   return false;
+}
+
+static void semaphore_broadcast_green(TrafficLight *tl, LightState new_state) {
+  if (new_state == LIGHT_HORIZ_GREEN) {
+
+    for (int w = 0; w < tl->horiz_waiters; w++) {
+      sem_post(&tl->horiz_sem);
+    }
+  } else {
+
+    for (int w = 0; w < tl->vert_waiters; w++) {
+      sem_post(&tl->vert_sem);
+    }
+  }
+}
+
+static void semaphore_broadcast_all(TrafficLight *tl) {
+  for (int w = 0; w < tl->horiz_waiters; w++) {
+    sem_post(&tl->horiz_sem);
+  }
+  for (int w = 0; w < tl->vert_waiters; w++) {
+    sem_post(&tl->vert_sem);
+  }
 }
 
 static void *traffic_manager_routine(void *arg) {
   (void)arg;
 
   uint64_t last_processed_tick = 0;
-  while (keep_traffic_running) {
 
+  while (keep_traffic_running) {
     pthread_mutex_lock(&clock_mutex);
     pthread_cond_wait(&clock_cond, &clock_mutex);
     uint64_t current_tick = global_tick;
     pthread_mutex_unlock(&clock_mutex);
 
-    if (!keep_traffic_running) {
+    if (!keep_traffic_running)
       break;
-    }
 
-    if (current_tick == last_processed_tick) {
+    if (current_tick == last_processed_tick)
       continue;
-    }
     last_processed_tick = current_tick;
 
     for (int i = 0; i < num_lights; i++) {
       TrafficLight *tl = &lights[i];
 
-      // Adiciona o ID do semáforo como deslocamento (offset) para
-      // dessincronizar
       if ((current_tick + (uint64_t)tl->id) % (uint64_t)tl->toggle_ticks == 0) {
         pthread_mutex_lock(&tl->mutex);
 
-        // Garante que o estado real bata 100% com a fórmula matemática
-        // (compute_light_state)
-        tl->state = compute_light_state(tl, current_tick);
+        LightState new_state = compute_light_state(tl, current_tick);
+        tl->state = new_state;
 
-        pthread_cond_broadcast(&tl->cond);
+        semaphore_broadcast_green(tl, new_state);
+
         pthread_mutex_unlock(&tl->mutex);
       }
     }
@@ -76,68 +101,94 @@ static void *traffic_manager_routine(void *arg) {
 }
 
 static TrafficLight *get_light_at(int row, int col) {
-
   for (int i = 0; i < num_lights; i++) {
-    if (lights[i].row == row && lights[i].col == col) {
+    if (lights[i].row == row && lights[i].col == col)
       return &lights[i];
-    }
   }
   return NULL;
 }
 
 void traffic_wait_for_green(int row, int col, char vehicle_dir) {
   TrafficLight *tl = get_light_at(row, col);
-  if (!tl) {
+  if (!tl)
     return;
-  }
 
-  pthread_mutex_lock(&tl->mutex);
+  bool is_horiz = is_horizontal_dir(vehicle_dir);
+  sem_t *sem = is_horiz ? &tl->horiz_sem : &tl->vert_sem;
 
-  while (!is_allowed(tl->state, vehicle_dir) && keep_traffic_running) {
-    pthread_cond_wait(&tl->cond, &tl->mutex);
+  while (keep_traffic_running) {
+    pthread_mutex_lock(&tl->mutex);
+
+    if (is_allowed(tl->state, vehicle_dir) || !keep_traffic_running) {
+      pthread_mutex_unlock(&tl->mutex);
+      return;
+    }
+
+    if (is_horiz) {
+      tl->horiz_waiters++;
+    } else {
+      tl->vert_waiters++;
+    }
+
+    pthread_mutex_unlock(&tl->mutex);
+
+    sem_wait(sem);
+
+    pthread_mutex_lock(&tl->mutex);
+    if (is_horiz) {
+      tl->horiz_waiters--;
+    } else {
+      tl->vert_waiters--;
+    }
+    bool still_allowed = is_allowed(tl->state, vehicle_dir);
+    pthread_mutex_unlock(&tl->mutex);
+
+    if (still_allowed)
+      return;
   }
-  pthread_mutex_unlock(&tl->mutex);
 }
-// Calcula o estado do semáforo deterministicamente a partir do tick,
-// sem depender da thread do semáforo (elimina race condition).
+
 static LightState compute_light_state(const TrafficLight *tl, uint64_t tick) {
 
-  // Prioridade da Ambulância, força a cor do sinal
   if (tl->priority_active) {
-    if (tl->priority_dir == 'L' || tl->priority_dir == '>' ||
-        tl->priority_dir == 'O' || tl->priority_dir == '<') {
+    if (is_horizontal_dir(tl->priority_dir))
       return LIGHT_HORIZ_GREEN;
-    } else {
-      return LIGHT_VERT_GREEN;
-    }
+    return LIGHT_VERT_GREEN;
   }
-  // Comportamento normal do relógio com offset para dessincronizar
+
   uint64_t phase = ((tick + (uint64_t)tl->id) / (uint64_t)tl->toggle_ticks) % 2;
   return (phase == 0) ? LIGHT_HORIZ_GREEN : LIGHT_VERT_GREEN;
 }
 
 bool traffic_is_green(int row, int col, char vehicle_dir) {
   TrafficLight *tl = get_light_at(row, col);
-  if (!tl) {
+  if (!tl)
     return true;
-  }
-  // Usa global_tick para o display (que não passa tick)
+
   pthread_mutex_lock(&clock_mutex);
   uint64_t tick = global_tick;
   pthread_mutex_unlock(&clock_mutex);
 
+  pthread_mutex_lock(&tl->mutex);
   LightState state = compute_light_state(tl, tick);
-  return is_allowed(state, vehicle_dir);
+  bool allowed = is_allowed(state, vehicle_dir);
+  pthread_mutex_unlock(&tl->mutex);
+
+  return allowed;
 }
 
 bool traffic_is_safe_to_enter(int row, int col, char vehicle_dir,
                               uint64_t current_tick) {
   TrafficLight *tl = get_light_at(row, col);
-  if (!tl) {
+  if (!tl)
     return true;
-  }
+
+  pthread_mutex_lock(&tl->mutex);
   LightState state = compute_light_state(tl, current_tick);
-  return is_allowed(state, vehicle_dir);
+  bool allowed = is_allowed(state, vehicle_dir);
+  pthread_mutex_unlock(&tl->mutex);
+
+  return allowed;
 }
 
 void traffic_init(const Map *map, int default_toggle_ticks) {
@@ -145,14 +196,13 @@ void traffic_init(const Map *map, int default_toggle_ticks) {
     fprintf(stderr, "[TRAFFIC] Erro: default_toggle_ticks deve ser > 0.\n");
     exit(EXIT_FAILURE);
   }
+
   num_lights = 0;
-  for (int row = 0; row < map->rows; row++) {
-    for (int colum = 0; colum < map->columns; colum++) {
-      if (map->cell_grid[row][colum].type == INTERSECTION) {
+  for (int row = 0; row < map->rows; row++)
+    for (int col = 0; col < map->columns; col++)
+      if (map->cell_grid[row][col].type == INTERSECTION)
         num_lights++;
-      }
-    }
-  }
+
   lights = (TrafficLight *)malloc((size_t)num_lights * sizeof(TrafficLight));
   if (lights == NULL) {
     fprintf(
@@ -162,17 +212,29 @@ void traffic_init(const Map *map, int default_toggle_ticks) {
   }
 
   int index = 0;
-
   for (int row = 0; row < map->rows; row++) {
-    for (int colum = 0; colum < map->columns; colum++) {
-      if (map->cell_grid[row][colum].type == INTERSECTION) {
-        lights[index].id = index;
-        lights[index].row = row;
-        lights[index].col = colum;
-        lights[index].state = LIGHT_HORIZ_GREEN;
-        lights[index].toggle_ticks = default_toggle_ticks;
-        pthread_mutex_init(&lights[index].mutex, NULL);
-        pthread_cond_init(&lights[index].cond, NULL);
+    for (int col = 0; col < map->columns; col++) {
+      if (map->cell_grid[row][col].type == INTERSECTION) {
+        TrafficLight *tl = &lights[index];
+
+        tl->id = index;
+        tl->row = row;
+        tl->col = col;
+        tl->state = LIGHT_HORIZ_GREEN;
+        tl->toggle_ticks = default_toggle_ticks;
+        tl->priority_active = false;
+        tl->priority_dir = ' ';
+        tl->horiz_waiters = 0;
+        tl->vert_waiters = 0;
+        tl->capacity_waiters = 0;
+
+        pthread_mutex_init(&tl->mutex, NULL);
+
+        sem_init(&tl->horiz_sem, 0, 0);
+        sem_init(&tl->vert_sem, 0, 0);
+
+        sem_init(&tl->capacity_sem, 0, INTERSECTION_CAPACITY);
+
         index++;
       }
     }
@@ -199,7 +261,12 @@ void traffic_stop(void) {
 
   for (int i = 0; i < num_lights; i++) {
     pthread_mutex_lock(&lights[i].mutex);
-    pthread_cond_broadcast(&lights[i].cond);
+    semaphore_broadcast_all(&lights[i]);
+
+    for (int w = 0; w < lights[i].capacity_waiters; w++) {
+      sem_post(&lights[i].capacity_sem);
+    }
+
     pthread_mutex_unlock(&lights[i].mutex);
   }
 
@@ -207,14 +274,19 @@ void traffic_stop(void) {
 }
 
 void traffic_destroy(void) {
-  if (lights == NULL) {
+  if (lights == NULL)
     return;
-  }
+
+  keep_traffic_running = false;
 
   for (int i = 0; i < num_lights; i++) {
     pthread_mutex_destroy(&lights[i].mutex);
-    pthread_cond_destroy(&lights[i].cond);
+
+    sem_destroy(&lights[i].horiz_sem);
+    sem_destroy(&lights[i].vert_sem);
+    sem_destroy(&lights[i].capacity_sem);
   }
+
   free(lights);
   lights = NULL;
   num_lights = 0;
@@ -229,7 +301,9 @@ void traffic_request_priority(int row, int col, char direction) {
   tl->priority_active = true;
   tl->priority_dir = direction;
 
-  pthread_cond_broadcast(&tl->cond);
+  LightState new_state = compute_light_state(tl, 0);
+  tl->state = new_state;
+  semaphore_broadcast_green(tl, new_state);
 
   pthread_mutex_unlock(&tl->mutex);
 }
@@ -239,11 +313,16 @@ void traffic_release_priority(int row, int col) {
   if (!tl)
     return;
 
-  pthread_mutex_lock(&tl->mutex);
+  pthread_mutex_lock(&clock_mutex);
+  uint64_t tick = global_tick;
+  pthread_mutex_unlock(&clock_mutex);
 
+  pthread_mutex_lock(&tl->mutex);
   tl->priority_active = false;
 
-  pthread_cond_broadcast(&tl->cond);
+  LightState new_state = compute_light_state(tl, tick);
+  tl->state = new_state;
+  semaphore_broadcast_green(tl, new_state);
 
   pthread_mutex_unlock(&tl->mutex);
 }
@@ -252,9 +331,48 @@ bool traffic_is_priority_active(void) {
   if (!lights)
     return false;
   for (int i = 0; i < num_lights; i++) {
-    if (lights[i].priority_active) {
+    if (lights[i].priority_active)
       return true;
-    }
   }
   return false;
+}
+
+bool traffic_try_enter_capacity(int row, int col) {
+  TrafficLight *tl = get_light_at(row, col);
+  if (!tl)
+    return true;
+
+  return (sem_trywait(&tl->capacity_sem) == 0);
+}
+
+void traffic_release_capacity(int row, int col) {
+  TrafficLight *tl = get_light_at(row, col);
+  if (!tl)
+    return;
+
+  sem_post(&tl->capacity_sem);
+}
+
+void traffic_enter_intersection(int row, int col) {
+  TrafficLight *tl = get_light_at(row, col);
+  if (!tl)
+    return;
+
+  pthread_mutex_lock(&tl->mutex);
+  if (!keep_traffic_running) {
+    pthread_mutex_unlock(&tl->mutex);
+    return;
+  }
+  tl->capacity_waiters++;
+  pthread_mutex_unlock(&tl->mutex);
+
+  sem_wait(&tl->capacity_sem);
+
+  pthread_mutex_lock(&tl->mutex);
+  tl->capacity_waiters--;
+  pthread_mutex_unlock(&tl->mutex);
+}
+void traffic_leave_intersection(int row, int col) {
+
+  traffic_release_capacity(row, col);
 }

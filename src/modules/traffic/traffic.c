@@ -1,5 +1,6 @@
 #include "traffic.h"
 #include "../clock/clock.h"
+#include "../logger/logger.h"
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdbool.h>
@@ -65,6 +66,13 @@ static void *traffic_manager_routine(void *arg) {
       tl->state = new_state;
 
       if (changed) {
+        // LOG CONCORRENTE DE ALTERAÇÃO DO SEMÁFORO
+        logger_write(LOG_INFO,
+                     "Semáforo %d em [%d][%d] alterou para estado: %s", tl->id,
+                     tl->row, tl->col,
+                     new_state == LIGHT_HORIZ_GREEN ? "VERDE HORIZONTAL"
+                                                    : "VERDE VERTICAL");
+
         pthread_cond_broadcast(&tl->cond);
       }
 

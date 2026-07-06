@@ -12,15 +12,20 @@
  * veículo. Autores: Leôncio Ferreira e André Wesley.
  */
 
-void vehicle_exit_map_cleanup(Vehicle *vehicle, Map *map, bool owns_exit_lock,
+void vehicle_exit_map_cleanup(Vehicle *vehicle, Map *map,
+                              bool owns_current_lock, bool owns_exit_lock,
                               int locked_exit_row, int locked_exit_col) {
-  map->cell_grid[vehicle->row][vehicle->col].current_vehicle = NULL;
 
-  if (map->cell_grid[vehicle->row][vehicle->col].type == INTERSECTION) {
-    traffic_release_capacity(vehicle->row, vehicle->col);
+  if (owns_current_lock) {
+    map->cell_grid[vehicle->row][vehicle->col].current_vehicle = NULL;
+
+    if (map->cell_grid[vehicle->row][vehicle->col].type == INTERSECTION) {
+      traffic_release_capacity(vehicle->row, vehicle->col);
+    }
+
+    pthread_mutex_unlock(&map->cell_grid[vehicle->row][vehicle->col].mutex);
   }
 
-  pthread_mutex_unlock(&map->cell_grid[vehicle->row][vehicle->col].mutex);
   if (owns_exit_lock &&
       is_within_map_bounds(map, locked_exit_row, locked_exit_col)) {
     pthread_mutex_unlock(
@@ -33,7 +38,8 @@ bool vehicle_try_reserve_movement(Vehicle *vehicle, Map *map, int next_row,
                                   bool owns_exit_lock, int locked_exit_row,
                                   int locked_exit_col, int *exit_row,
                                   int *exit_col) {
-  (void)vehicle;
+  bool current_is_intersection =
+      (map->cell_grid[vehicle->row][vehicle->col].type == INTERSECTION);
   bool target_is_intersection =
       (map->cell_grid[next_row][next_col].type == INTERSECTION);
 
@@ -43,7 +49,8 @@ bool vehicle_try_reserve_movement(Vehicle *vehicle, Map *map, int next_row,
          next_col == locked_exit_col);
 
     if (!already_owns_target_lock) {
-      if (!traffic_is_safe_to_enter(next_row, next_col, direction, tick)) {
+      if (!current_is_intersection &&
+          !traffic_is_safe_to_enter(next_row, next_col, direction, tick)) {
         return false;
       }
       if (pthread_mutex_trylock(&map->cell_grid[next_row][next_col].mutex) !=
@@ -89,11 +96,12 @@ void vehicle_perform_move(Vehicle *vehicle, Map *map, int next_row,
                           int next_col, bool target_is_intersection,
                           int exit_row, int exit_col, bool *owns_exit_lock,
                           int *locked_exit_row, int *locked_exit_col) {
-  map->cell_grid[next_row][next_col].current_vehicle = vehicle;
-  map->cell_grid[vehicle->row][vehicle->col].current_vehicle = NULL;
-
   int previous_row = vehicle->row;
   int previous_col = vehicle->col;
+
+  map->cell_grid[next_row][next_col].current_vehicle = vehicle;
+
+  map->cell_grid[previous_row][previous_col].current_vehicle = NULL;
 
   vehicle->row = next_row;
   vehicle->col = next_col;

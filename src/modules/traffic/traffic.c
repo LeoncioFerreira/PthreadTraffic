@@ -2,6 +2,7 @@
 #include "../clock/clock.h"
 #include <pthread.h>
 #include <semaphore.h>
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,13 +13,14 @@
  * fornece mecanismos para barrar os carros no sinal vermelho e acordá-los com
  * segurança quando o sinal abrir.
  * Autor: Paulo e Leôncio Ferreira
-
+ *
  */
 
 static TrafficLight *lights = NULL;
 static int num_lights = 0;
 static pthread_t manager_thread;
-static volatile bool keep_traffic_running = false;
+
+static atomic_bool keep_traffic_running = false;
 
 /* Forward declaration */
 static LightState compute_light_state(const TrafficLight *tl, uint64_t tick);
@@ -69,13 +71,13 @@ static void *traffic_manager_routine(void *arg) {
 
   uint64_t last_processed_tick = 0;
 
-  while (keep_traffic_running) {
+  while (atomic_load(&keep_traffic_running)) {
     pthread_mutex_lock(&clock_mutex);
     pthread_cond_wait(&clock_cond, &clock_mutex);
     uint64_t current_tick = global_tick;
     pthread_mutex_unlock(&clock_mutex);
 
-    if (!keep_traffic_running)
+    if (!atomic_load(&keep_traffic_running))
       break;
 
     if (current_tick == last_processed_tick)
@@ -116,10 +118,11 @@ void traffic_wait_for_green(int row, int col, char vehicle_dir) {
   bool is_horiz = is_horizontal_dir(vehicle_dir);
   sem_t *sem = is_horiz ? &tl->horiz_sem : &tl->vert_sem;
 
-  while (keep_traffic_running) {
+  while (atomic_load(&keep_traffic_running)) {
     pthread_mutex_lock(&tl->mutex);
 
-    if (is_allowed(tl->state, vehicle_dir) || !keep_traffic_running) {
+    if (is_allowed(tl->state, vehicle_dir) ||
+        !atomic_load(&keep_traffic_running)) {
       pthread_mutex_unlock(&tl->mutex);
       return;
     }
@@ -242,7 +245,7 @@ void traffic_init(const Map *map, int default_toggle_ticks) {
 }
 
 void traffic_start(void) {
-  keep_traffic_running = true;
+  atomic_store(&keep_traffic_running, true);
 
   if (pthread_create(&manager_thread, NULL, traffic_manager_routine, NULL) !=
       0) {
@@ -253,7 +256,7 @@ void traffic_start(void) {
 }
 
 void traffic_stop(void) {
-  keep_traffic_running = false;
+  atomic_store(&keep_traffic_running, false);
 
   pthread_mutex_lock(&clock_mutex);
   pthread_cond_broadcast(&clock_cond);
@@ -274,10 +277,11 @@ void traffic_stop(void) {
 }
 
 void traffic_destroy(void) {
+
   if (lights == NULL)
     return;
 
-  keep_traffic_running = false;
+  atomic_store(&keep_traffic_running, false);
 
   for (int i = 0; i < num_lights; i++) {
     pthread_mutex_destroy(&lights[i].mutex);
@@ -359,7 +363,7 @@ void traffic_enter_intersection(int row, int col) {
     return;
 
   pthread_mutex_lock(&tl->mutex);
-  if (!keep_traffic_running) {
+  if (!atomic_load(&keep_traffic_running)) {
     pthread_mutex_unlock(&tl->mutex);
     return;
   }

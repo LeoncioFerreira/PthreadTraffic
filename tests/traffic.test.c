@@ -1,28 +1,36 @@
 /**
  * Descrição: Testes unitários para o módulo de semáforos, validando a
  * inicialização, a liberação de direções horizontais/verticais e o bloqueio.
- * Autor: Paulo
+ * Autores: Paulo e Leôncio
  */
 #include "modules/traffic/traffic.h"
+#include "modules/clock/clock.h"
 #include "modules/map/map.h"
 #include "vendor/unity.h"
 #include <pthread.h>
 #include <semaphore.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-#include "modules/map/map.h"
-#include "modules/traffic/traffic.h"
-#include "vendor/unity.h"
-#include <pthread.h>
-#include <semaphore.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include <unistd.h>
 
 // Variável estática do mapa de teste para isolar o módulo
 static Map *test_map = NULL;
+static pthread_t wait_thread;
+static volatile bool wait_finished = false;
+static bool traffic_started = false;
+
+static void *wait_for_vertical_green(void *arg) {
+  (void)arg;
+  traffic_wait_for_green(1, 1, 'N');
+  wait_finished = true;
+  return NULL;
+}
 
 void setUp(void) {
+  clock_init();
+  traffic_started = false;
+
   // Aloca um mapa fictício 3x3 na memória RAM
   test_map = (Map *)malloc(sizeof(Map));
   if (test_map == NULL) {
@@ -36,7 +44,6 @@ void setUp(void) {
   for (int i = 0; i < 3; i++) {
     test_map->cell_grid[i] = (Cell *)malloc(3 * sizeof(Cell));
     for (int j = 0; j < 3; j++) {
-      // ALINHADO COM MAP.H: ROADS no lugar de ROAD, sem atributos row/col
       test_map->cell_grid[i][j].type = ROADS;
       test_map->cell_grid[i][j].direction = 'L';
       pthread_mutex_init(&test_map->cell_grid[i][j].mutex, NULL);
@@ -52,8 +59,15 @@ void setUp(void) {
 }
 
 void tearDown(void) {
-  // Destrói os primitivos de tráfego (mutexes, conds e semáforos POSIX)
+  if (traffic_started) {
+    traffic_stop();
+  }
+  if (clock_is_running()) {
+    clock_stop();
+  }
+
   traffic_destroy();
+  clock_destroy();
 
   if (test_map != NULL) {
     for (int i = 0; i < test_map->rows; i++) {
@@ -118,11 +132,38 @@ void test_traffic_ignores_non_intersection_coords(void) {
       true, "Coordenadas fora de cruzamento foram ignoradas com segurança");
 }
 
+// ============================================================================
+// TESTES DE SINCRONIZAÇÃO TEMPORAL
+// ============================================================================
+
+void test_traffic_wait_for_green_blocks_until_signal_changes(void) {
+  wait_finished = false;
+
+  traffic_start();
+  traffic_started = true;
+  pthread_create(&wait_thread, NULL, wait_for_vertical_green, NULL);
+
+  usleep(20000);
+  TEST_ASSERT_FALSE_MESSAGE(wait_finished,
+                            "A thread nao deveria atravessar enquanto o "
+                            "semaforo vertical esta vermelho.");
+
+  clock_start(10);
+  usleep(70000);
+
+  pthread_join(wait_thread, NULL);
+
+  TEST_ASSERT_TRUE_MESSAGE(
+      wait_finished,
+      "A thread deveria ser liberada apos o semaforo trocar para verde.");
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_traffic_starts_horizontal_green);
   RUN_TEST(test_semaphore_initial_capacity);
   RUN_TEST(test_semaphore_post_restores_capacity);
   RUN_TEST(test_traffic_ignores_non_intersection_coords);
+  RUN_TEST(test_traffic_wait_for_green_blocks_until_signal_changes);
   return UNITY_END();
 }

@@ -8,12 +8,10 @@
 #include <stdlib.h>
 
 /**
- * Descrição: Esse arquivo implementa a thread que gerencia os semáforos,
- * alternando os sinais entre as direções ao ritmo do relógio global. Também
- * fornece mecanismos para barrar os carros no sinal vermelho e acordá-los com
- * segurança quando o sinal abrir.
+ * Descrição: Implementação do gerenciamento de semáforos e controle de
+ * capacidade de cruzamentos. Inclui lógica para agrupar células de um mesmo
+ * cruzamento 2x2 sob uma única célula base.
  * Autor: Paulo e Leôncio Ferreira
- *
  */
 
 static TrafficLight *lights = NULL;
@@ -22,15 +20,14 @@ static pthread_t manager_thread;
 
 static atomic_bool keep_traffic_running = false;
 
-/* Forward declaration */
+/* Forward declarations */
 static LightState compute_light_state(const TrafficLight *tl, uint64_t tick);
+static TrafficLight *get_light_at(int row, int col);
 
-/* Retorna true se a direção é horizontal (Leste ou Oeste) */
 static bool is_horizontal_dir(char dir) {
   return (dir == 'L' || dir == '>' || dir == 'O' || dir == '<');
 }
 
-/* Retorna true se a direção é vertical (Norte ou Sul) */
 static bool is_vertical_dir(char dir) {
   return (dir == 'N' || dir == '^' || dir == 'S' || dir == 'v');
 }
@@ -45,12 +42,10 @@ static bool is_allowed(LightState state, char dir) {
 
 static void semaphore_broadcast_green(TrafficLight *tl, LightState new_state) {
   if (new_state == LIGHT_HORIZ_GREEN) {
-
     for (int w = 0; w < tl->horiz_waiters; w++) {
       sem_post(&tl->horiz_sem);
     }
   } else {
-
     for (int w = 0; w < tl->vert_waiters; w++) {
       sem_post(&tl->vert_sem);
     }
@@ -68,7 +63,6 @@ static void semaphore_broadcast_all(TrafficLight *tl) {
 
 static void *traffic_manager_routine(void *arg) {
   (void)arg;
-
   uint64_t last_processed_tick = 0;
 
   while (atomic_load(&keep_traffic_running)) {
@@ -87,7 +81,10 @@ static void *traffic_manager_routine(void *arg) {
     for (int i = 0; i < num_lights; i++) {
       TrafficLight *tl = &lights[i];
 
-      if ((current_tick + (uint64_t)tl->id) % (uint64_t)tl->toggle_ticks == 0) {
+      int base_id = (tl->base_light != NULL) ? tl->base_light->id : tl->id;
+
+      if ((current_tick + (uint64_t)base_id) % (uint64_t)tl->toggle_ticks ==
+          0) {
         pthread_mutex_lock(&tl->mutex);
 
         LightState new_state = compute_light_state(tl, current_tick);
@@ -152,14 +149,15 @@ void traffic_wait_for_green(int row, int col, char vehicle_dir) {
 }
 
 static LightState compute_light_state(const TrafficLight *tl, uint64_t tick) {
-
   if (tl->priority_active) {
     if (is_horizontal_dir(tl->priority_dir))
       return LIGHT_HORIZ_GREEN;
     return LIGHT_VERT_GREEN;
   }
 
-  uint64_t phase = ((tick + (uint64_t)tl->id) / (uint64_t)tl->toggle_ticks) % 2;
+  int base_id = (tl->base_light != NULL) ? tl->base_light->id : tl->id;
+  uint64_t phase =
+      ((tick + (uint64_t)base_id) / (uint64_t)tl->toggle_ticks) % 2;
   return (phase == 0) ? LIGHT_HORIZ_GREEN : LIGHT_VERT_GREEN;
 }
 
@@ -230,16 +228,33 @@ void traffic_init(const Map *map, int default_toggle_ticks) {
         tl->horiz_waiters = 0;
         tl->vert_waiters = 0;
         tl->capacity_waiters = 0;
+        tl->base_light = tl;
 
         pthread_mutex_init(&tl->mutex, NULL);
-
         sem_init(&tl->horiz_sem, 0, 0);
         sem_init(&tl->vert_sem, 0, 0);
-
         sem_init(&tl->capacity_sem, 0, INTERSECTION_CAPACITY);
 
         index++;
       }
+    }
+  }
+
+  for (int i = 0; i < num_lights; i++) {
+    TrafficLight *tl = &lights[i];
+    int base_r = tl->row;
+    int base_c = tl->col;
+
+    if (base_r > 0 && map->cell_grid[base_r - 1][base_c].type == INTERSECTION) {
+      base_r--;
+    }
+    if (base_c > 0 && map->cell_grid[base_r][base_c - 1].type == INTERSECTION) {
+      base_c--;
+    }
+
+    TrafficLight *base = get_light_at(base_r, base_c);
+    if (base != NULL) {
+      tl->base_light = base;
     }
   }
 }
@@ -277,7 +292,6 @@ void traffic_stop(void) {
 }
 
 void traffic_destroy(void) {
-
   if (lights == NULL)
     return;
 
@@ -285,7 +299,6 @@ void traffic_destroy(void) {
 
   for (int i = 0; i < num_lights; i++) {
     pthread_mutex_destroy(&lights[i].mutex);
-
     sem_destroy(&lights[i].horiz_sem);
     sem_destroy(&lights[i].vert_sem);
     sem_destroy(&lights[i].capacity_sem);
@@ -308,7 +321,6 @@ void traffic_request_priority(int row, int col, char direction) {
   LightState new_state = compute_light_state(tl, 0);
   tl->state = new_state;
   semaphore_broadcast_green(tl, new_state);
-
   pthread_mutex_unlock(&tl->mutex);
 }
 
@@ -327,7 +339,6 @@ void traffic_release_priority(int row, int col) {
   LightState new_state = compute_light_state(tl, tick);
   tl->state = new_state;
   semaphore_broadcast_green(tl, new_state);
-
   pthread_mutex_unlock(&tl->mutex);
 }
 
@@ -346,7 +357,9 @@ bool traffic_try_enter_capacity(int row, int col) {
   if (!tl)
     return true;
 
-  return (sem_trywait(&tl->capacity_sem) == 0);
+  /* Redireciona o consumo do semáforo para a célula base do cruzamento */
+  TrafficLight *base = tl->base_light ? tl->base_light : tl;
+  return (sem_trywait(&base->capacity_sem) == 0);
 }
 
 void traffic_release_capacity(int row, int col) {
@@ -354,7 +367,8 @@ void traffic_release_capacity(int row, int col) {
   if (!tl)
     return;
 
-  sem_post(&tl->capacity_sem);
+  TrafficLight *base = tl->base_light ? tl->base_light : tl;
+  sem_post(&base->capacity_sem);
 }
 
 void traffic_enter_intersection(int row, int col) {
@@ -362,21 +376,23 @@ void traffic_enter_intersection(int row, int col) {
   if (!tl)
     return;
 
-  pthread_mutex_lock(&tl->mutex);
+  TrafficLight *base = tl->base_light ? tl->base_light : tl;
+
+  pthread_mutex_lock(&base->mutex);
   if (!atomic_load(&keep_traffic_running)) {
-    pthread_mutex_unlock(&tl->mutex);
+    pthread_mutex_unlock(&base->mutex);
     return;
   }
-  tl->capacity_waiters++;
-  pthread_mutex_unlock(&tl->mutex);
+  base->capacity_waiters++;
+  pthread_mutex_unlock(&base->mutex);
 
-  sem_wait(&tl->capacity_sem);
+  sem_wait(&base->capacity_sem);
 
-  pthread_mutex_lock(&tl->mutex);
-  tl->capacity_waiters--;
-  pthread_mutex_unlock(&tl->mutex);
+  pthread_mutex_lock(&base->mutex);
+  base->capacity_waiters--;
+  pthread_mutex_unlock(&base->mutex);
 }
-void traffic_leave_intersection(int row, int col) {
 
+void traffic_leave_intersection(int row, int col) {
   traffic_release_capacity(row, col);
 }

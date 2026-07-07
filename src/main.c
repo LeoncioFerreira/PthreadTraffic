@@ -1,9 +1,4 @@
-/**
- * Descrição: Orquestração do sistema, inicialização dos subsistemas, disparo
- * das threads iniciais e garantia do encerramento seguro de todo o simulador.
- * Autor: André
- */
-
+#define _GNU_SOURCE // CRUCIAL: Ativa o pthread_tryjoin_np no Linux/WSL
 #include "modules/clock/clock.h"
 #include "modules/display/display.h"
 #include "modules/map/map.h"
@@ -17,7 +12,9 @@
 #include <time.h>
 #include <unistd.h>
 
-#define NUM_VEHICLES 12
+#define MAX_CONCURRENT_VEHICLES                                                \
+  20                          // Limite máximo de carros simultâneos no mapa
+#define SPAWN_INTERVAL_SECS 2 // Tenta spawnar um carro a cada X segundos
 
 /* Esta variável controla se o simulador continua rodando ou não */
 static volatile bool keep_running = true;
@@ -38,139 +35,163 @@ static bool init_systems(Map **mapa) {
   /* 1. Inicializa o mapa */
   *mapa = load_map("mapa.txt");
   if (*mapa == NULL) {
-    fprintf(stderr, "[MAIN] ERRO: Falha no carregamento do mapa.\n");
+    fprintf(stderr, "[WRAPPER] ERRO: Falha crítica ao carregar o mapa.\n");
     return false;
   }
-  traffic_init(*mapa, 5);
 
-  /* 2. Inicializa as estruturas do Relógio (Mutex e Condição) */
+  /* 2. Inicializa o relógio global */
   clock_init();
-  printf("[WRAPPER] Subsistema de Relógio inicializado com sucesso.\n");
+
+  /* 3. Inicializa o subsistema de semáforos (ritmo de 5 ticks) */
+  traffic_init(*mapa, 5);
 
   return true;
 }
 
-int main() {
+/* Função auxiliar para encontrar um ponto de spawn válido e seguro no mapa */
+static bool find_random_spawn_position(const Map *map, int *out_row,
+                                       int *out_col) {
+  int attempts =
+      100; // Limite para evitar loop infinito caso o mapa esteja lotado
 
-  srand(time(NULL));
-  /* Direciona o Ctrl+C para a função */
+  while (attempts-- > 0) {
+    int r = rand() % map->rows;
+    int c = map->columns > 0 ? rand() % map->columns : 0;
+
+    // Regra de segurança: Deve ser uma pista válida e NÃO pode ser um
+    // cruzamento
+    if (map->cell_grid[r][c].type != INTERSECTION &&
+        map->cell_grid[r][c].direction != ' ') {
+      *out_row = r;
+      *out_col = c;
+      return true;
+    }
+  }
+  return false;
+}
+
+int main(void) {
+  Map *mapa = NULL;
+  unsigned int vehicle_id_counter = 1;
+
+  /* Configura o tratamento do sinal Ctrl+C */
   signal(SIGINT, handle_shutdown_signal);
 
-  printf("Simulador de Tráfego Pthread\n");
+  /* Semeia o gerador de números aleatórios */
+  srand(time(NULL));
 
-  /* Carregamento e inicialização dos sistemas através do Wrapper 1 */
-  Map *mapa = NULL;
-  if (init_systems(&mapa) == false) {
+  /* Executa a inicialização encapsulada */
+  if (!init_systems(&mapa)) {
     return EXIT_FAILURE;
   }
 
-  printf("Mapa carregado com sucesso! Dimensões: %d linhas x %d colunas\n",
-         mapa->rows, mapa->columns);
-
-  printf("\n==========================================\n");
-  printf("    LEGENDA DA SIMULACAO:\n");
-  printf("==========================================\n");
-  printf("[\033[1;31mC\033[0m] Carro Civil Normal\n");
-  printf("[\033[5;34mA\033[0m] Ambulancia (Tem prioridade!)\n");
-  printf("[\033[32m-\033[0m] Semaforo: Verde para via Horizontal\n");
-  printf("[\033[32m|\033[0m] Semaforo: Verde para via Vertical\n\n");
-
-  printf("A interface visual ira iniciar em 5 segundos...\n");
-  fflush(stdout);
-  sleep(5);
-
-  /* Dispara a thread do Relógio */
-  printf("[MAIN] Ativando a thread do Relógio...\n");
-  clock_start(1000);
+  /* Dispara os motores do relógio e dos semáforos */
+  clock_start(200);
   traffic_start();
 
-  /* Cria e dispara o Veículo de teste */
-  printf("[MAIN] Criando e ativando veículo de teste...\n");
-
-  Vehicle *fleet[NUM_VEHICLES];
-
-  // Coordenadas (linha, coluna) de ruas válidas nas bordas do seu mapa atual
-  // Ex: Linha 3 (Leste), Linha 8 (Leste), Linha 13 (Leste), Linha 4 (Oeste),
-  // Linha 9 (Oeste)
-  const int start_positions[NUM_VEHICLES][2] = {
-      {3, 0},   // Leste (linha 3)
-      {4, 42},  // Oeste (linha 4)
-      {8, 0},   // Leste (linha 8)
-      {9, 42},  // Oeste (linha 9)
-      {13, 0},  // Leste (linha 13)
-      {14, 42}, // Oeste (linha 14)
-      {17, 7},  // Norte (coluna 7)
-      {0, 8},   // Sul (coluna 8)
-      {17, 16}, // Norte (coluna 16)
-      {0, 17},  // Sul (coluna 17)
-      {17, 25}, // Norte (coluna 25)
-      {0, 26}   // Sul (coluna 26)
-  };
-
-  for (int i = 0; i < NUM_VEHICLES; i++) {
-    VehicleType type = FAST_CAR;
-    int speed_ticks = 1;
-
-    if (i == 0) {
-      type = AMBULANCE;
-      speed_ticks = 1; // Ambulância é rápida
-    } else if (i > 0 && i <= 4) {
-      type = FAST_CAR;
-      speed_ticks = 1;
-    } else if (i > 4 && i <= 8) {
-      type = MEDIUM_CAR;
-      speed_ticks = 2;
-    } else {
-      type = SLOW_CAR;
-      speed_ticks = 4;
-    }
-
-    fleet[i] = vehicle_create_and_start(i + 1, start_positions[i][0],
-                                        start_positions[i][1], speed_ticks,
-                                        type, mapa);
-
-    if (fleet[i] == NULL) {
-      fprintf(stderr, "[MAIN] ERRO: Falha ao criar o veículo %d.\n", i + 1);
-      // Num cenário real faríamos um loop de limpeza aqui, mas vamos seguir
-    }
+  // Pool dinâmica de veículos inicialmente vazia
+  Vehicle *fleet[MAX_CONCURRENT_VEHICLES];
+  for (int i = 0; i < MAX_CONCURRENT_VEHICLES; i++) {
+    fleet[i] = NULL;
   }
-
-  printf("[MAIN] Simulação em andamento. Use Ctrl+C para sair.\n");
 
   printf("[MAIN] Ativando a thread de Visualização (Display)...\n");
   display_start(mapa);
 
-  printf("[MAIN] Simulação em andamento. Use Ctrl+C para sair.\n");
+  printf("[MAIN] Simulação dinâmica em andamento. Use Ctrl+C para sair.\n");
 
-  /* Loop principal de execução */
+  int spawn_timer = 0;
+
+  /* Loop principal de execução atuando como Gerenciador/Spawner */
   while (keep_running == true) {
+
+    // Garbage Collection de Threads: percorre a pool procurando por veículos
+    // que saíram do mapa para libertar recursos
+    for (int i = 0; i < MAX_CONCURRENT_VEHICLES; i++) {
+      if (fleet[i] != NULL) {
+        // pthread_tryjoin_np tenta fazer o join. Se retornar 0, a thread já
+        // terminou.
+        if (pthread_tryjoin_np(fleet[i]->thread_id, NULL) == 0) {
+          vehicle_destroy(fleet[i]);
+          fleet[i] = NULL;
+        }
+      }
+    }
+
+    // PASSO 2: Spawner Automático Dinâmico
+    spawn_timer++;
+    if (spawn_timer >= SPAWN_INTERVAL_SECS) {
+      spawn_timer = 0;
+
+      // Procura por um slot livre na pool
+      int free_slot = -1;
+      for (int i = 0; i < MAX_CONCURRENT_VEHICLES; i++) {
+        if (fleet[i] == NULL) {
+          free_slot = i;
+          break;
+        }
+      }
+
+      // Se houver vaga na pool, tenta spawnar
+      if (free_slot != -1) {
+        int spawn_row, spawn_col;
+
+        if (find_random_spawn_position(mapa, &spawn_row, &spawn_col)) {
+          // Sorteia o tipo do carro
+          VehicleType type;
+          int speed_ticks;
+          int roll = rand() % 4;
+
+          if (roll == 0) {
+            type = FAST_CAR;
+            speed_ticks = 1;
+          } else if (roll == 1) {
+            type = AMBULANCE;
+            speed_ticks = 1;
+          } else if (roll == 2) {
+            type = MEDIUM_CAR;
+            speed_ticks = 2;
+          } else {
+            type = SLOW_CAR;
+            speed_ticks = 4;
+          }
+
+          // Cria e inicia a thread do veículo
+          Vehicle *new_v =
+              vehicle_create_and_start(vehicle_id_counter++, spawn_row,
+                                       spawn_col, speed_ticks, type, mapa);
+          if (new_v != NULL) {
+            fleet[free_slot] = new_v;
+          }
+        }
+      }
+    }
+
     sleep(1);
   }
 
   printf("[MAIN] Encerrando recursos de forma segura...\n");
+
+  // Para os motores para forçar as threads restantes a sair dos seus loops de
+  // tick
   clock_stop();
-
   traffic_stop();
-
   display_stop();
 
-  printf(
-      "[MAIN] Finalizando a thread do veículo de teste de forma segura...\n");
-  for (int i = 0; i < NUM_VEHICLES; i++) {
+  printf("[MAIN] Finalizando as threads dos veículos restantes...\n");
+  for (int i = 0; i < MAX_CONCURRENT_VEHICLES; i++) {
     if (fleet[i] != NULL) {
+      pthread_join(fleet[i]->thread_id, NULL);
       vehicle_destroy(fleet[i]);
     }
   }
 
-  printf("[MAIN] Parando e destruindo o subsistema de semáforos...\n");
-  traffic_destroy();
-
-  printf("[MAIN] Parando e destruindo o relógio...\n");
   clock_destroy();
+  traffic_destroy();
+  if (mapa) {
+    destroy(mapa);
+  }
 
-  printf("[MAIN] Destruindo a estrutura do mapa...\n");
-  destroy(mapa);
-
-  printf("[MAIN] Simulação encerrada com sucesso!\n");
+  printf("[MAIN] Sistema finalizado com sucesso!\n");
   return EXIT_SUCCESS;
 }

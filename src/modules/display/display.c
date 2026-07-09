@@ -23,25 +23,50 @@ static void *display_routine(void *arg) {
     if (!keep_display_running)
       break;
 
+    /*
+     * Pequeno atraso para permitir que os veículos processem o tick
+     * antes de o display tirar o snapshot visual.
+     */
+    usleep(20000); // 20 ms
+
     char frame_buffer[32768];
     int offset = 0;
 
     offset += snprintf(frame_buffer + offset, sizeof(frame_buffer) - offset,
                        "\033[H\033[J");
 
+    int rows = shared_map->rows;
+    int cols = shared_map->columns;
+
+    size_t total_cells = (size_t)rows * (size_t)cols;
+    char *vehicle_snapshot = (char *)malloc(total_cells * sizeof(char));
+
+    if (vehicle_snapshot == NULL) {
+      continue;
+    }
+
     int count_cars = 0;
     int count_ambulances = 0;
-    for (int i = 0; i < shared_map->rows; i++) {
-      for (int j = 0; j < shared_map->columns; j++) {
+
+    pthread_mutex_lock(&map_state_mutex);
+
+    for (int i = 0; i < rows; i++) {
+      for (int j = 0; j < cols; j++) {
         Vehicle *v = shared_map->cell_grid[i][j].current_vehicle;
-        if (v != NULL) {
-          if (v->type == AMBULANCE)
-            count_ambulances++;
-          else
-            count_cars++;
+
+        if (v == NULL) {
+          vehicle_snapshot[i * cols + j] = ' ';
+        } else if (v->type == AMBULANCE) {
+          vehicle_snapshot[i * cols + j] = 'A';
+          count_ambulances++;
+        } else {
+          vehicle_snapshot[i * cols + j] = 'C';
+          count_cars++;
         }
       }
     }
+
+    pthread_mutex_unlock(&map_state_mutex);
 
     offset += snprintf(frame_buffer + offset, sizeof(frame_buffer) - offset,
                        "=== SIMULADOR DE TRAFEGO PTHREAD === (Tick: %lu)\n",
@@ -69,50 +94,37 @@ static void *display_routine(void *arg) {
           snprintf(frame_buffer + offset, sizeof(frame_buffer) - offset, "\n");
     }
 
-    // Varre e desenha o mapa
-    for (int i = 0; i < shared_map->rows; i++) {
-      for (int j = 0; j < shared_map->columns; j++) {
-        CellType cell_type;
-        char cell_direction;
-        Vehicle *current_vehicle;
+    // Varre e desenha o mapa usando o snapshot dos veículos
+    for (int i = 0; i < rows; i++) {
+      for (int j = 0; j < cols; j++) {
+        CellType cell_type = shared_map->cell_grid[i][j].type;
+        char cell_direction = shared_map->cell_grid[i][j].direction;
+        char vehicle_symbol = vehicle_snapshot[i * cols + j];
 
-        if (pthread_mutex_trylock(&shared_map->cell_grid[i][j].mutex) == 0) {
-          cell_type = shared_map->cell_grid[i][j].type;
-          cell_direction = shared_map->cell_grid[i][j].direction;
-          current_vehicle = shared_map->cell_grid[i][j].current_vehicle;
-          pthread_mutex_unlock(&shared_map->cell_grid[i][j].mutex);
-        } else {
-          cell_type = shared_map->cell_grid[i][j].type;
-          cell_direction = shared_map->cell_grid[i][j].direction;
-          current_vehicle = shared_map->cell_grid[i][j].current_vehicle;
-        }
-
-        if (current_vehicle != NULL) {
-          if (current_vehicle->type == AMBULANCE) {
-            offset +=
-                snprintf(frame_buffer + offset, sizeof(frame_buffer) - offset,
-                         "\033[5;34mA\033[0m");
-          } else {
-            // Carro normal (vermelho)
-            offset +=
-                snprintf(frame_buffer + offset, sizeof(frame_buffer) - offset,
-                         "\033[1;31mC\033[0m");
-          }
+        if (vehicle_symbol == 'A') {
+          offset +=
+              snprintf(frame_buffer + offset, sizeof(frame_buffer) - offset,
+                       "\033[5;34mA\033[0m");
+        } else if (vehicle_symbol == 'C') {
+          offset +=
+              snprintf(frame_buffer + offset, sizeof(frame_buffer) - offset,
+                       "\033[1;31mC\033[0m");
         } else {
           if (cell_type == EMPTY) {
             offset += snprintf(frame_buffer + offset,
                                sizeof(frame_buffer) - offset, " ");
           } else if (cell_type == INTERSECTION) {
-            // Garante consistência com o que os veículos viram neste tick.
+
             bool is_green_for_horizontal =
                 traffic_is_safe_to_enter(i, j, '>', display_tick);
+
             if (is_green_for_horizontal) {
-              // VERDE: horizontal (← →) pode passar
+              // VERDE: horizontal pode passar
               offset +=
                   snprintf(frame_buffer + offset, sizeof(frame_buffer) - offset,
                            "\033[32m-\033[0m");
             } else {
-              // VERMELHO: vertical (↑ ↓) pode passar, horizontal fechado
+              // VERDE: vertical pode passar
               offset +=
                   snprintf(frame_buffer + offset, sizeof(frame_buffer) - offset,
                            "\033[32m|\033[0m");
@@ -124,18 +136,24 @@ static void *display_routine(void *arg) {
           }
         }
       }
+
       offset +=
           snprintf(frame_buffer + offset, sizeof(frame_buffer) - offset, "\n");
     }
+
+    free(vehicle_snapshot);
+
     printf("%s", frame_buffer);
-    fflush(stdout); // Força a atualização da tela imediatamente
+    fflush(stdout);
   }
+
   return NULL;
 }
 
 void display_start(Map *map) {
   shared_map = map;
   keep_display_running = true;
+
   if (pthread_create(&display_thread, NULL, display_routine, NULL) != 0) {
     perror("Erro ao criar thread do display");
     exit(EXIT_FAILURE);

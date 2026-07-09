@@ -10,6 +10,7 @@
  * matriz principal do Mapa (Map). Autor: Paulo Gabriel
  */
 
+extern pthread_mutex_t map_state_mutex;
 // FOWARD DECLARATION.
 typedef struct Vehicle Vehicle;
 

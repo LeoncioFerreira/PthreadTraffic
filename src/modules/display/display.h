@@ -3,6 +3,8 @@
 
 #include "../map/map.h"
 
+void display_print_legend(void);
+
 // Inicializa a thread de visualização
 void display_start(Map *map);
 

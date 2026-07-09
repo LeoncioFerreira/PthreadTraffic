@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 static pthread_t display_thread;
 static Map *shared_map = NULL;
@@ -150,4 +151,18 @@ void display_stop(void) {
   pthread_mutex_unlock(&clock_mutex);
 
   pthread_join(display_thread, NULL);
+}
+
+void display_print_legend(void) {
+  printf("\n==========================================\n");
+  printf("    LEGENDA DA SIMULACAO:\n");
+  printf("==========================================\n");
+  printf("[\033[1;31mC\033[0m] Carro Civil Normal\n");
+  printf("[\033[5;34mA\033[0m] Ambulancia (Tem prioridade!)\n");
+  printf("[\033[32m-\033[0m] Semaforo: Verde para via Horizontal\n");
+  printf("[\033[32m|\033[0m] Semaforo: Verde para via Vertical\n\n");
+
+  printf("A interface visual ira iniciar em 5 segundos...\n");
+  fflush(stdout);
+  sleep(5);
 }

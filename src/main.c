@@ -1,98 +1,28 @@
-#define _GNU_SOURCE // CRUCIAL: Ativa o pthread_tryjoin_np no Linux/WSL
+#define _GNU_SOURCE
 #include "modules/clock/clock.h"
 #include "modules/display/display.h"
-#include "modules/logger/logger.h"
+#include "modules/initializer/initializer.h"
 #include "modules/map/map.h"
 #include "modules/spawner/spawner.h"
 #include "modules/traffic/traffic.h"
-#include "modules/vehicle/vehicle.h"
-#include <pthread.h>
-#include <signal.h>
-#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include <unistd.h>
-
-typedef struct {
-  int max_vehicles;
-  int tick_ms;
-  char *map_path;
-} Config;
-
-/* Esta variável controla se o simulador continua rodando ou não */
-static volatile bool keep_running = true;
-
-/* Função chamada automaticamente quando o usuário aperta Ctrl+C no terminal */
-static void handle_shutdown_signal(int signal) {
-  if (signal == SIGINT) {
-    printf("\n[MAIN] Ctrl+C detectado! Preparando o encerramento do "
-           "simulador...\n");
-    keep_running = false;
-  }
-}
-
-/* WRAPPER 1: Retorna true se todos os módulos iniciarem com sucesso. */
-static bool init_systems(int argc, char *argv[], Config *cfg, Map **mapa) {
-  int opt;
-  while ((opt = getopt(argc, argv, "v:t:m:")) != -1) {
-    switch (opt) {
-    case 'v':
-      cfg->max_vehicles = atoi(optarg);
-      break;
-    case 't':
-      cfg->tick_ms = atoi(optarg);
-      break;
-    case 'm':
-      cfg->map_path = optarg;
-      break;
-    default:
-      fprintf(stderr, "Uso: %s [-v veiculos] [-t tick_ms] [-m mapa.txt]\n",
-              argv[0]);
-      return false;
-    }
-  }
-
-  printf("[WRAPPER] Inicializando subsistemas...\n");
-
-  /* 0. Inicializa o subsistema de Logs concorrente antes de qualquer outro */
-  if (!logger_init("simulador.log")) {
-    fprintf(stderr, "[MAIN] ERRO: Falha ao inicializar o arquivo de logs.\n");
-    return false;
-  }
-  logger_write(LOG_INFO, "Simulador de Tráfego Pthread iniciado.");
-
-  /* 1. Inicializa o mapa */
-  *mapa = load_map(cfg->map_path);
-  if (*mapa == NULL) {
-    fprintf(stderr, "[WRAPPER] ERRO: Falha crítica ao carregar o mapa.\n");
-    logger_destroy();
-    return false;
-  }
-
-  /* 2. Inicializa o relógio global */
-  clock_init();
-
-  /* 3. Inicializa o subsistema de semáforos (ritmo de 5 ticks) */
-  traffic_init(*mapa, 5);
-
-  return true;
-}
 
 int main(int argc, char *argv[]) {
   Map *mapa = NULL;
-  Config cfg = {.max_vehicles = 15, .tick_ms = 1000, .map_path = "mapa.txt"};
-
-  /* Configura o tratamento do sinal Ctrl+C */
-  signal(SIGINT, handle_shutdown_signal);
+  Config cfg;
 
   /* Semeia o gerador de números aleatórios */
   srand(time(NULL));
 
-  /* Executa a inicialização encapsulada */
-  if (!init_systems(argc, argv, &cfg, &mapa)) {
+  /* Executa a inicialização de todos os subsistemas encapsulados */
+  if (!system_init(argc, argv, &cfg, &mapa)) {
     return EXIT_FAILURE;
   }
+
+  /* Exibe a legenda inicial da simulação com contagem regressiva */
+  display_print_legend();
 
   /* Dispara os motores do relógio e dos semáforos */
   clock_start(cfg.tick_ms);
@@ -104,8 +34,10 @@ int main(int argc, char *argv[]) {
     traffic_stop();
     clock_destroy();
     traffic_destroy();
-    destroy(mapa);
-    logger_destroy();
+    if (mapa) {
+      destroy(mapa);
+    }
+    system_cleanup();
     return EXIT_FAILURE;
   }
 
@@ -114,30 +46,39 @@ int main(int argc, char *argv[]) {
 
   printf("[MAIN] Simulação dinâmica em andamento. Use Ctrl+C para sair.\n");
 
-  while (keep_running == true) {
-    sleep(1);
-  }
+  /* Aguarda o sinal de encerramento (Ctrl+C) de forma passiva */
+  system_wait_for_shutdown();
 
   printf("[MAIN] Encerrando recursos de forma segura...\n");
+  fflush(stdout);
 
-  // Para os motores para forçar as threads restantes a sair dos seus loops de
-  // tick
-  clock_stop();
-  traffic_stop();
+  // 1. Para a visualização (Display) primeiro para evitar flicker/limpeza de
+  // tela durante a saída
   display_stop();
 
+  // 2. Para a geração de novos veículos antes de parar o relógio e o tráfego
   spawner_stop();
 
+  // 3. Para os motores para forçar as threads restantes a sair dos seus loops
+  // de tick
+  clock_stop();
+  traffic_stop();
+
+  printf("[MAIN] Finalizando as threads dos veículos restantes...\n");
+  fflush(stdout);
+
+  // 4. Aguarda e limpa as threads de veículos que saíram de forma segura
+  spawner_cleanup();
+
+  /* Destrói e libera os recursos dos subsistemas */
   clock_destroy();
   traffic_destroy();
   if (mapa) {
     destroy(mapa);
   }
 
-  printf("[MAIN] Fechando descritores de logs...\n");
-  logger_write(LOG_INFO, "Simulador de Tráfego encerrado de forma limpa.");
-  logger_destroy();
+  /* Finaliza o logging e encerra o sistema formalmente */
+  system_cleanup();
 
-  printf("[MAIN] Sistema finalizado com sucesso!\n");
   return EXIT_SUCCESS;
 }

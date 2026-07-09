@@ -1,5 +1,6 @@
 #include "traffic.h"
 #include "../clock/clock.h"
+#include "../logger/logger.h"
 #include <pthread.h>
 #include <semaphore.h>
 #include <stdatomic.h>
@@ -85,10 +86,18 @@ static void *traffic_manager_routine(void *arg) {
 
       if ((current_tick + (uint64_t)base_id) % (uint64_t)tl->toggle_ticks ==
           0) {
-        pthread_mutex_lock(&tl->mutex);
-
+        LightState old_state = tl->state;
         LightState new_state = compute_light_state(tl, current_tick);
-        tl->state = new_state;
+
+        if (new_state != old_state) {
+          tl->state = new_state;
+          // LOG CONCORRENTE DE ALTERAÇÃO DO SEMÁFORO
+          logger_write(LOG_INFO,
+                       "Semáforo %d em [%d][%d] alterou para estado: %s",
+                       tl->id, tl->row, tl->col,
+                       new_state == LIGHT_HORIZ_GREEN ? "VERDE HORIZONTAL"
+                                                      : "VERDE VERTICAL");
+        }
 
         semaphore_broadcast_green(tl, new_state);
 

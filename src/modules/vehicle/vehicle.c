@@ -1,6 +1,7 @@
 #include "vehicle.h"
 #include "../ambulance/ambulance.h"
 #include "../clock/clock.h"
+#include "../logger/logger.h"
 #include "../navigation/navigation.h"
 #include "../traffic/traffic.h"
 #include "vehicle_utils.h"
@@ -17,9 +18,12 @@ void *vehicle_lifecycle(void *arg) {
   Vehicle *vehicle = (Vehicle *)arg;
   Map *map = vehicle->map_ref;
 
-  // Trava a célula inicial e se registra nela
   pthread_mutex_lock(&map->cell_grid[vehicle->row][vehicle->col].mutex);
   map->cell_grid[vehicle->row][vehicle->col].current_vehicle = vehicle;
+
+  logger_write(LOG_INFO, "Veículo %d (%s) entrou no mapa na posição [%d][%d]",
+               vehicle->id, vehicle->type == AMBULANCE ? "Ambulância" : "Civil",
+               vehicle->row, vehicle->col);
 
   bool current_owns_exit_lock = false;
   int locked_exit_row = -1;
@@ -37,6 +41,10 @@ void *vehicle_lifecycle(void *arg) {
     uint64_t current_tick = clock_wait_for_tick();
 
     if (!clock_is_running()) {
+      logger_write(
+          LOG_INFO,
+          "Veículo %d saindo do mapa devido ao encerramento do sistema",
+          vehicle->id);
       vehicle_exit_map_cleanup(vehicle, map, true, current_owns_exit_lock,
                                locked_exit_row, locked_exit_col);
       break;
@@ -99,8 +107,13 @@ void *vehicle_lifecycle(void *arg) {
                            &current_owns_exit_lock, &locked_exit_row,
                            &locked_exit_col);
 
+      logger_write(LOG_INFO, "Veículo %d moveu-se de [%d][%d] para [%d][%d]",
+                   vehicle->id, old_row, old_col, next_row, next_col);
+
       ambulance_clear_path(vehicle, map, old_row, old_col);
     } else {
+      logger_write(LOG_INFO, "Veículo %d chegou ao fim da via e saiu do mapa",
+                   vehicle->id);
       vehicle_exit_map_cleanup(vehicle, map, true, current_owns_exit_lock,
                                locked_exit_row, locked_exit_col);
       break;

@@ -1,4 +1,5 @@
 #include "ambulance.h"
+#include "../logger/logger.h"
 #include "../traffic/traffic.h"
 
 /**
@@ -13,6 +14,10 @@ void ambulance_request_path(Vehicle *v, Map *map, int target_row,
     return;
 
   if (map->cell_grid[target_row][target_col].type == INTERSECTION) {
+    logger_write(LOG_ALERT,
+                 "Ambulância %d solicitou prioridade no cruzamento [%d][%d]",
+                 v->id, target_row, target_col);
+
     for (int i = target_row - 1; i <= target_row + 1; i++) {
       for (int j = target_col - 1; j <= target_col + 1; j++) {
         if (is_within_map_bounds(map, i, j) &&
@@ -36,6 +41,9 @@ void ambulance_clear_path(Vehicle *v, Map *map, int prev_row, int prev_col) {
     }
 
     if (!current_is_intersection) {
+      logger_write(LOG_INFO, "Ambulância %d liberou o cruzamento [%d][%d]",
+                   v->id, prev_row, prev_col);
+
       for (int i = prev_row - 1; i <= prev_row + 1; i++) {
         for (int j = prev_col - 1; j <= prev_col + 1; j++) {
           if (is_within_map_bounds(map, i, j) &&

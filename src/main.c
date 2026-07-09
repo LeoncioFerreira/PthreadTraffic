@@ -1,6 +1,7 @@
 #define _GNU_SOURCE // CRUCIAL: Ativa o pthread_tryjoin_np no Linux/WSL
 #include "modules/clock/clock.h"
 #include "modules/display/display.h"
+#include "modules/logger/logger.h"
 #include "modules/map/map.h"
 #include "modules/traffic/traffic.h"
 #include "modules/vehicle/vehicle.h"
@@ -31,10 +32,18 @@ static void handle_shutdown_signal(int signal) {
 static bool init_systems(Map **mapa) {
   printf("[WRAPPER] Inicializando subsistemas...\n");
 
+  /* 0. Inicializa o subsistema de Logs concorrente antes de qualquer outro */
+  if (!logger_init("simulador.log")) {
+    fprintf(stderr, "[MAIN] ERRO: Falha ao inicializar o arquivo de logs.\n");
+    return false;
+  }
+  logger_write(LOG_INFO, "Simulador de Tráfego Pthread iniciado.");
+
   /* 1. Inicializa o mapa */
   *mapa = load_map("mapa.txt");
   if (*mapa == NULL) {
     fprintf(stderr, "[WRAPPER] ERRO: Falha crítica ao carregar o mapa.\n");
+    logger_destroy();
     return false;
   }
 
@@ -231,6 +240,10 @@ int main(void) {
 
   pthread_mutex_destroy(&spawn_mutex);
   pthread_cond_destroy(&spawn_cond);
+
+  printf("[MAIN] Fechando descritores de logs...\n");
+  logger_write(LOG_INFO, "Simulador de Tráfego encerrado de forma limpa.");
+  logger_destroy();
 
   printf("[MAIN] Sistema finalizado com sucesso!\n");
   return EXIT_SUCCESS;

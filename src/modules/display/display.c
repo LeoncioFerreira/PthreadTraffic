@@ -27,6 +27,21 @@ static void *display_routine(void *arg) {
 
     offset += snprintf(frame_buffer + offset, sizeof(frame_buffer) - offset,
                        "\033[H\033[J");
+
+    int count_cars = 0;
+    int count_ambulances = 0;
+    for (int i = 0; i < shared_map->rows; i++) {
+      for (int j = 0; j < shared_map->columns; j++) {
+        Vehicle *v = shared_map->cell_grid[i][j].current_vehicle;
+        if (v != NULL) {
+          if (v->type == AMBULANCE)
+            count_ambulances++;
+          else
+            count_cars++;
+        }
+      }
+    }
+
     offset += snprintf(frame_buffer + offset, sizeof(frame_buffer) - offset,
                        "=== SIMULADOR DE TRAFEGO PTHREAD === (Tick: %lu)\n",
                        display_tick);
@@ -36,6 +51,11 @@ static void *display_routine(void *arg) {
                        "[\033[5;34mA\033[0m] Ambulancia | "
                        "[\033[32m-\033[0m] Verde Horizontal | "
                        "[\033[32m|\033[0m] Verde Vertical\n");
+
+    offset += snprintf(frame_buffer + offset, sizeof(frame_buffer) - offset,
+                       "Veiculos: \033[1;31m%d carro(s)\033[0m | "
+                       "\033[5;34m%d ambulancia(s)\033[0m\n",
+                       count_cars, count_ambulances);
 
     // Alerta visual de prioridade da ambulância
     if (traffic_is_priority_active()) {

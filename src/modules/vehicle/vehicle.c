@@ -19,7 +19,9 @@ void *vehicle_lifecycle(void *arg) {
   Map *map = vehicle->map_ref;
 
   pthread_mutex_lock(&map->cell_grid[vehicle->row][vehicle->col].mutex);
+  pthread_mutex_lock(&map_state_mutex);
   map->cell_grid[vehicle->row][vehicle->col].current_vehicle = vehicle;
+  pthread_mutex_unlock(&map_state_mutex);
 
   logger_write(LOG_INFO, "Veículo %d (%s) entrou no mapa na posição [%d][%d]",
                vehicle->id, vehicle->type == AMBULANCE ? "Ambulância" : "Civil",
@@ -160,13 +162,17 @@ Vehicle *vehicle_create_and_start(int id, int start_row, int start_col,
     return NULL;
   }
 
+  pthread_mutex_lock(&map_state_mutex);
   map->cell_grid[start_row][start_col].current_vehicle = vehicle;
+  pthread_mutex_unlock(&map_state_mutex);
   pthread_mutex_unlock(&map->cell_grid[start_row][start_col].mutex);
 
   if (pthread_create(&vehicle->thread_id, NULL, vehicle_lifecycle,
                      (void *)vehicle) != 0) {
     pthread_mutex_lock(&map->cell_grid[start_row][start_col].mutex);
+    pthread_mutex_lock(&map_state_mutex);
     map->cell_grid[start_row][start_col].current_vehicle = NULL;
+    pthread_mutex_unlock(&map_state_mutex);
     pthread_mutex_unlock(&map->cell_grid[start_row][start_col].mutex);
     free(vehicle);
     return NULL;

@@ -36,17 +36,12 @@ void *vehicle_lifecycle(void *arg) {
   }
 
   char current_direction = last_valid_direction;
+  bool exited_normally = false;
 
   while (clock_is_running()) {
     uint64_t current_tick = clock_wait_for_tick();
 
     if (!clock_is_running()) {
-      logger_write(
-          LOG_INFO,
-          "Veículo %d saindo do mapa devido ao encerramento do sistema",
-          vehicle->id);
-      vehicle_exit_map_cleanup(vehicle, map, true, current_owns_exit_lock,
-                               locked_exit_row, locked_exit_col);
       break;
     }
 
@@ -82,8 +77,6 @@ void *vehicle_lifecycle(void *arg) {
                                     current_tick)) {
         traffic_wait_for_green(next_row, next_col, current_direction);
         if (!clock_is_running()) {
-          vehicle_exit_map_cleanup(vehicle, map, true, current_owns_exit_lock,
-                                   locked_exit_row, locked_exit_col);
           break;
         }
         /* Atualiza o tick após a espera */
@@ -114,11 +107,19 @@ void *vehicle_lifecycle(void *arg) {
     } else {
       logger_write(LOG_INFO, "Veículo %d chegou ao fim da via e saiu do mapa",
                    vehicle->id);
-      vehicle_exit_map_cleanup(vehicle, map, true, current_owns_exit_lock,
-                               locked_exit_row, locked_exit_col);
+      exited_normally = true;
       break;
     }
   }
+
+  if (!exited_normally) {
+    logger_write(LOG_INFO,
+                 "Veículo %d saindo do mapa devido ao encerramento do sistema",
+                 vehicle->id);
+  }
+  vehicle_exit_map_cleanup(vehicle, map, true, current_owns_exit_lock,
+                           locked_exit_row, locked_exit_col);
+
   return NULL;
 }
 

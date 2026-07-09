@@ -86,6 +86,7 @@ static void *traffic_manager_routine(void *arg) {
 
       if ((current_tick + (uint64_t)base_id) % (uint64_t)tl->toggle_ticks ==
           0) {
+        pthread_mutex_lock(&tl->mutex);
         LightState old_state = tl->state;
         LightState new_state = compute_light_state(tl, current_tick);
 

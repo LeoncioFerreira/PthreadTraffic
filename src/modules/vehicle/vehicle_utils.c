@@ -17,7 +17,10 @@ void vehicle_exit_map_cleanup(Vehicle *vehicle, Map *map,
                               int locked_exit_row, int locked_exit_col) {
 
   if (owns_current_lock) {
+
+    pthread_mutex_lock(&map_state_mutex);
     map->cell_grid[vehicle->row][vehicle->col].current_vehicle = NULL;
+    pthread_mutex_unlock(&map_state_mutex);
 
     if (map->cell_grid[vehicle->row][vehicle->col].type == INTERSECTION) {
       traffic_release_capacity(vehicle->row, vehicle->col);
@@ -99,15 +102,26 @@ void vehicle_perform_move(Vehicle *vehicle, Map *map, int next_row,
   int previous_row = vehicle->row;
   int previous_col = vehicle->col;
 
-  map->cell_grid[next_row][next_col].current_vehicle = vehicle;
+  pthread_mutex_lock(&map_state_mutex);
 
+  map->cell_grid[next_row][next_col].current_vehicle = vehicle;
   map->cell_grid[previous_row][previous_col].current_vehicle = NULL;
 
   vehicle->row = next_row;
   vehicle->col = next_col;
 
+  pthread_mutex_unlock(&map_state_mutex);
+
   if (map->cell_grid[previous_row][previous_col].type == INTERSECTION) {
-    traffic_release_capacity(previous_row, previous_col);
+    bool previous_was_intersection =
+        (map->cell_grid[previous_row][previous_col].type == INTERSECTION);
+    bool current_is_intersection =
+        (map->cell_grid[next_row][next_col].type == INTERSECTION);
+
+    // Só libera a capacidade do semáforo se o carro saiu de vez do cruzamento!
+    if (previous_was_intersection && !current_is_intersection) {
+      traffic_release_capacity(previous_row, previous_col);
+    }
   }
 
   pthread_mutex_unlock(&map->cell_grid[previous_row][previous_col].mutex);

@@ -8,6 +8,7 @@
  * Gabriel
  */
 
+pthread_mutex_t map_state_mutex = PTHREAD_MUTEX_INITIALIZER;
 Map *load_map(const char *path_file) {
 
   FILE *arquivo = fopen(path_file, "r");

@@ -19,7 +19,9 @@ void *vehicle_lifecycle(void *arg) {
   Map *map = vehicle->map_ref;
 
   pthread_mutex_lock(&map->cell_grid[vehicle->row][vehicle->col].mutex);
+  pthread_mutex_lock(&map_state_mutex);
   map->cell_grid[vehicle->row][vehicle->col].current_vehicle = vehicle;
+  pthread_mutex_unlock(&map_state_mutex);
 
   logger_write(LOG_INFO, "Veículo %d (%s) entrou no mapa na posição [%d][%d]",
                vehicle->id, vehicle->type == AMBULANCE ? "Ambulância" : "Civil",
@@ -62,24 +64,39 @@ void *vehicle_lifecycle(void *arg) {
 
     if (is_within_map_bounds(map, next_row, next_col)) {
       int exit_row = -1, exit_col = -1;
+
       bool target_is_intersection =
           (map->cell_grid[next_row][next_col].type == INTERSECTION);
-
-      // Ambulância pede passagem antes de tentar reservar
-      ambulance_request_path(vehicle, map, next_row, next_col,
-                             current_direction);
 
       bool current_is_intersection =
           (map->cell_grid[vehicle->row][vehicle->col].type == INTERSECTION);
 
+      // Ambulância pede passagem apenas quando está entrando no cruzamento,
+      // não quando já está se movendo dentro dele.
+      if (vehicle->type == AMBULANCE && target_is_intersection &&
+          !current_is_intersection) {
+        ambulance_request_path(vehicle, map, next_row, next_col,
+                               current_direction);
+      }
+
       if (target_is_intersection && !current_is_intersection &&
           !traffic_is_safe_to_enter(next_row, next_col, current_direction,
                                     current_tick)) {
+
+        // 1. Libera o mutex da célula atual para o Display poder desenhar.
+        pthread_mutex_unlock(&map->cell_grid[vehicle->row][vehicle->col].mutex);
+
+        // 2. O carro espera o sinal verde sem prender a interface.
         traffic_wait_for_green(next_row, next_col, current_direction);
+
+        // 3. O sinal abriu; readquire o bloqueio da célula atual.
+        pthread_mutex_lock(&map->cell_grid[vehicle->row][vehicle->col].mutex);
+
         if (!clock_is_running()) {
           break;
         }
-        /* Atualiza o tick após a espera */
+
+        // Atualiza o tick após a espera.
         pthread_mutex_lock(&clock_mutex);
         current_tick = global_tick;
         pthread_mutex_unlock(&clock_mutex);
@@ -117,6 +134,7 @@ void *vehicle_lifecycle(void *arg) {
                  "Veículo %d saindo do mapa devido ao encerramento do sistema",
                  vehicle->id);
   }
+
   vehicle_exit_map_cleanup(vehicle, map, true, current_owns_exit_lock,
                            locked_exit_row, locked_exit_col);
 
@@ -143,13 +161,18 @@ Vehicle *vehicle_create_and_start(int id, int start_row, int start_col,
     free(vehicle);
     return NULL;
   }
+
+  pthread_mutex_lock(&map_state_mutex);
   map->cell_grid[start_row][start_col].current_vehicle = vehicle;
+  pthread_mutex_unlock(&map_state_mutex);
   pthread_mutex_unlock(&map->cell_grid[start_row][start_col].mutex);
 
   if (pthread_create(&vehicle->thread_id, NULL, vehicle_lifecycle,
                      (void *)vehicle) != 0) {
     pthread_mutex_lock(&map->cell_grid[start_row][start_col].mutex);
+    pthread_mutex_lock(&map_state_mutex);
     map->cell_grid[start_row][start_col].current_vehicle = NULL;
+    pthread_mutex_unlock(&map_state_mutex);
     pthread_mutex_unlock(&map->cell_grid[start_row][start_col].mutex);
     free(vehicle);
     return NULL;

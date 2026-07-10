@@ -1,3 +1,8 @@
+/**
+ * Descrição: Definição de rotinas para tratamento de sinais e limpeza de
+ * threads. Autores: Salomão Rodrigues e Leôncio Ferreira
+ */
+
 #ifndef INITIALIZER_H
 #define INITIALIZER_H
 

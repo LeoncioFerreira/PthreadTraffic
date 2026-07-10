@@ -1,3 +1,8 @@
+/**
+ * Descrição: Definições e funções para interface com o terminal ASCII.
+ * Autor: Salomão Rodrigues
+ */
+
 #ifndef DISPLAY_H
 #define DISPLAY_H
 

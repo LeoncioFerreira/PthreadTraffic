@@ -1,3 +1,9 @@
+/**
+ * Descrição: Ponto de entrada principal do simulador de tráfego. Inicializa os
+ * subsistemas (relógio, mapa, spawner) e orquestra a execução concorrente.
+ * Autor: André Wesley
+ */
+
 #define _GNU_SOURCE
 #include "modules/clock/clock.h"
 #include "modules/display/display.h"

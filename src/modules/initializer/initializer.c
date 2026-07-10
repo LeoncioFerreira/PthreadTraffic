@@ -1,3 +1,9 @@
+/**
+ * Descrição: Implementação da inicialização segura do simulador e interceptação
+ * de sinais (SIGINT) para encerramento limpo das threads. Autores: Salomão
+ * Rodrigues e Leôncio Ferreira
+ */
+
 #define _GNU_SOURCE
 #include "initializer.h"
 #include "../clock/clock.h"

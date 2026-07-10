@@ -1,3 +1,9 @@
+/**
+ * Descrição: Implementação da visualização em console (ASCII) com suporte a
+ * duplo buffer para exibição suave do mapa, veículos e semáforos. Autor:
+ * Salomão Rodrigues
+ */
+
 #include "display.h"
 #include "../clock/clock.h"
 #include "../traffic/traffic.h"

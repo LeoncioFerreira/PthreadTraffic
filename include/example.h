@@ -1,3 +1,8 @@
+/**
+ * Descrição: Cabeçalho dummy para compatibilidade de testes no pipeline de CI.
+ * Autor: Leôncio Ferreira
+ */
+
 // Arquivo só para passar no pipeline
 
 #ifndef EXAMPLE_H

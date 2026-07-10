@@ -1,3 +1,9 @@
+/**
+ * Descrição: Implementação do spawner concorrente que insere novos carros na
+ * malha de acordo com regras de ocupação e limites definidos. Autor: Salomão
+ * Rodrigues
+ */
+
 #define _GNU_SOURCE
 #include "spawner.h"
 #include "../vehicle/vehicle.h"

@@ -1,3 +1,8 @@
+/**
+ * Descrição: Funções utilitárias e regras auxiliares para movimentação de
+ * veículos. Autor: Leôncio Ferreira
+ */
+
 #ifndef VEHICLE_UTILS_H
 #define VEHICLE_UTILS_H
 

@@ -1,3 +1,8 @@
+/**
+ * Descrição: Protótipos para geração dinâmica e temporizada de novos veículos.
+ * Autor: Salomão Rodrigues
+ */
+
 #ifndef SPAWNER_H
 #define SPAWNER_H
 

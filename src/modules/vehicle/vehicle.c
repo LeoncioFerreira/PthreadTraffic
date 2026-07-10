@@ -52,9 +52,13 @@ void *vehicle_lifecycle(void *arg) {
     }
 
     int next_row, next_col;
+    char previous_direction = current_direction;
+    char previous_last_valid_direction = last_valid_direction;
     if (!vehicle_choose_next_position(vehicle, map, current_tick,
                                       &current_direction, &last_valid_direction,
                                       &next_row, &next_col)) {
+      current_direction = previous_direction;
+      last_valid_direction = previous_last_valid_direction;
       continue;
     }
 
@@ -83,20 +87,12 @@ void *vehicle_lifecycle(void *arg) {
           !traffic_is_safe_to_enter(next_row, next_col, current_direction,
                                     current_tick)) {
 
-        // 1. Libera o mutex da célula atual para o Display poder desenhar.
-        pthread_mutex_unlock(&map->cell_grid[vehicle->row][vehicle->col].mutex);
-
-        // 2. O carro espera o sinal verde sem prender a interface.
         traffic_wait_for_green(next_row, next_col, current_direction);
-
-        // 3. O sinal abriu; readquire o bloqueio da célula atual.
-        pthread_mutex_lock(&map->cell_grid[vehicle->row][vehicle->col].mutex);
 
         if (!clock_is_running()) {
           break;
         }
 
-        // Atualiza o tick após a espera.
         pthread_mutex_lock(&clock_mutex);
         current_tick = global_tick;
         pthread_mutex_unlock(&clock_mutex);
@@ -106,6 +102,8 @@ void *vehicle_lifecycle(void *arg) {
               vehicle, map, next_row, next_col, current_direction, current_tick,
               current_owns_exit_lock, locked_exit_row, locked_exit_col,
               &exit_row, &exit_col)) {
+        current_direction = previous_direction;
+        last_valid_direction = previous_last_valid_direction;
         continue;
       }
 

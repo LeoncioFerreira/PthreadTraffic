@@ -1,5 +1,6 @@
 #include "vehicle_utils.h"
 #include "../deadlock/deadlock.h"
+#include "../logger/logger.h"
 #include "../navigation/navigation.h"
 #include "../traffic/traffic.h"
 #include <pthread.h>
@@ -56,8 +57,19 @@ bool vehicle_try_reserve_movement(Vehicle *vehicle, Map *map, int next_row,
           !traffic_is_safe_to_enter(next_row, next_col, direction, tick)) {
         return false;
       }
+
       if (pthread_mutex_trylock(&map->cell_grid[next_row][next_col].mutex) !=
           0) {
+        return false;
+      }
+
+      pthread_mutex_lock(&map_state_mutex);
+      bool target_has_vehicle =
+          (map->cell_grid[next_row][next_col].current_vehicle != NULL);
+      pthread_mutex_unlock(&map_state_mutex);
+
+      if (target_has_vehicle) {
+        pthread_mutex_unlock(&map->cell_grid[next_row][next_col].mutex);
         return false;
       }
     }
@@ -73,10 +85,11 @@ bool vehicle_try_reserve_movement(Vehicle *vehicle, Map *map, int next_row,
     if (!already_owns_target_lock &&
         !traffic_try_enter_capacity(next_row, next_col)) {
       pthread_mutex_unlock(&map->cell_grid[next_row][next_col].mutex);
-      /* exit_cell foi reservada em deadlock_try_reserve_exit_cell; libera */
+
       if (is_within_map_bounds(map, *exit_row, *exit_col)) {
         pthread_mutex_unlock(&map->cell_grid[*exit_row][*exit_col].mutex);
       }
+
       return false;
     }
   } else {
@@ -87,6 +100,16 @@ bool vehicle_try_reserve_movement(Vehicle *vehicle, Map *map, int next_row,
     if (!already_owns_target_lock) {
       if (pthread_mutex_trylock(&map->cell_grid[next_row][next_col].mutex) !=
           0) {
+        return false;
+      }
+
+      pthread_mutex_lock(&map_state_mutex);
+      bool target_has_vehicle =
+          (map->cell_grid[next_row][next_col].current_vehicle != NULL);
+      pthread_mutex_unlock(&map_state_mutex);
+
+      if (target_has_vehicle) {
+        pthread_mutex_unlock(&map->cell_grid[next_row][next_col].mutex);
         return false;
       }
     }
@@ -153,6 +176,29 @@ bool vehicle_choose_next_position(const Vehicle *vehicle, const Map *map,
 
   calculate_next_position(*current_direction, vehicle->row, vehicle->col,
                           next_row, next_col);
+
+  if (vehicle->type == AMBULANCE) {
+    CellType current_type = map->cell_grid[vehicle->row][vehicle->col].type;
+    char current_cell_dir =
+        map->cell_grid[vehicle->row][vehicle->col].direction;
+
+    CellType next_type = EMPTY;
+    char next_cell_dir = 'X';
+
+    if (is_within_map_bounds(map, *next_row, *next_col)) {
+      next_type = map->cell_grid[*next_row][*next_col].type;
+      next_cell_dir = map->cell_grid[*next_row][*next_col].direction;
+    }
+
+    logger_write(
+        LOG_INFO,
+        "DEBUG AMB NAV: id=%d tick=%llu pos=[%d][%d] type=%d cell_dir='%c' "
+        "current_dir='%c' last_dir='%c' next=[%d][%d] next_type=%d "
+        "next_dir='%c'",
+        vehicle->id, (unsigned long long)tick, vehicle->row, vehicle->col,
+        current_type, current_cell_dir, *current_direction,
+        *last_valid_direction, *next_row, *next_col, next_type, next_cell_dir);
+  }
 
   return (*next_row != vehicle->row || *next_col != vehicle->col);
 }

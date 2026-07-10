@@ -27,5 +27,20 @@ bool deadlock_try_reserve_exit_cell(const Map *map, int inter_row,
 
   int result =
       pthread_mutex_trylock(&map->cell_grid[*exit_row][*exit_col].mutex);
-  return (result == 0);
+
+  if (result != 0) {
+    return false;
+  }
+
+  pthread_mutex_lock(&map_state_mutex);
+  bool exit_has_vehicle =
+      (map->cell_grid[*exit_row][*exit_col].current_vehicle != NULL);
+  pthread_mutex_unlock(&map_state_mutex);
+
+  if (exit_has_vehicle) {
+    pthread_mutex_unlock(&map->cell_grid[*exit_row][*exit_col].mutex);
+    return false;
+  }
+
+  return true;
 }

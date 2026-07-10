@@ -56,8 +56,19 @@ bool vehicle_try_reserve_movement(Vehicle *vehicle, Map *map, int next_row,
           !traffic_is_safe_to_enter(next_row, next_col, direction, tick)) {
         return false;
       }
+
       if (pthread_mutex_trylock(&map->cell_grid[next_row][next_col].mutex) !=
           0) {
+        return false;
+      }
+
+      pthread_mutex_lock(&map_state_mutex);
+      bool target_has_vehicle =
+          (map->cell_grid[next_row][next_col].current_vehicle != NULL);
+      pthread_mutex_unlock(&map_state_mutex);
+
+      if (target_has_vehicle) {
+        pthread_mutex_unlock(&map->cell_grid[next_row][next_col].mutex);
         return false;
       }
     }
@@ -73,10 +84,11 @@ bool vehicle_try_reserve_movement(Vehicle *vehicle, Map *map, int next_row,
     if (!already_owns_target_lock &&
         !traffic_try_enter_capacity(next_row, next_col)) {
       pthread_mutex_unlock(&map->cell_grid[next_row][next_col].mutex);
-      /* exit_cell foi reservada em deadlock_try_reserve_exit_cell; libera */
+
       if (is_within_map_bounds(map, *exit_row, *exit_col)) {
         pthread_mutex_unlock(&map->cell_grid[*exit_row][*exit_col].mutex);
       }
+
       return false;
     }
   } else {
@@ -87,6 +99,16 @@ bool vehicle_try_reserve_movement(Vehicle *vehicle, Map *map, int next_row,
     if (!already_owns_target_lock) {
       if (pthread_mutex_trylock(&map->cell_grid[next_row][next_col].mutex) !=
           0) {
+        return false;
+      }
+
+      pthread_mutex_lock(&map_state_mutex);
+      bool target_has_vehicle =
+          (map->cell_grid[next_row][next_col].current_vehicle != NULL);
+      pthread_mutex_unlock(&map_state_mutex);
+
+      if (target_has_vehicle) {
+        pthread_mutex_unlock(&map->cell_grid[next_row][next_col].mutex);
         return false;
       }
     }

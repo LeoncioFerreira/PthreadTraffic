@@ -1,5 +1,7 @@
 #include "unity.h"
+#include <stdbool.h>
 #include <stdio.h>
+volatile bool keep_running = true;
 
 void setUp() {}
 void tearDown() {}

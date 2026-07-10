@@ -112,6 +112,7 @@ O projeto segue uma estrutura de **Monolito Modular**, onde cada subsistema é i
     - `fix: ...` (Correções)
     - `docs: ...` (Documentação)
     - `refactor: ...` (Refatoração)
+- **Revisão de Código:** Usamos assistentes de IA (como GitHub Copilot) para realizar o *double check* nos Pull Requests (PRs) antes da aprovação final.
 
 ## 🚀 Como Compilar e Executar
 

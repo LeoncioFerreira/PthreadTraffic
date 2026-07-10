@@ -1,6 +1,26 @@
 # PthreadTraffic
 
+[![CI Workflow](https://github.com/LeoncioFerreira/Trabalho-de-SO/actions/workflows/ci.yml/badge.svg)](https://github.com/LeoncioFerreira/Trabalho-de-SO/actions)
+[![Language: C](https://img.shields.io/badge/Language-C-blue.svg)](https://en.wikipedia.org/wiki/C_(programming_language))
+[![Concurrency: Pthreads](https://img.shields.io/badge/Concurrency-Pthreads-orange.svg)](https://en.wikipedia.org/wiki/POSIX_Threads)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Simulador concorrente de tráfego urbano desenvolvido em C utilizando a biblioteca POSIX Threads (Pthreads). A aplicação simula de forma concorrente e visual (console ASCII) o movimento de veículos civis e de emergência disputando células da via, com cruzamentos coordenados por semáforos, prevenção contra travamentos (deadlocks) e renderização via duplo buffer em tempo real.
+
+## 🎬 Demonstração
+
+![Demonstração do Simulador de Tráfego](docs/video.gif)
+
+> Demonstração em tempo real do simulador de tráfego urbano: cruzamentos, semáforos, movimento de veículos e prioridade da ambulância. Versão em vídeo (`.webm`) também disponível em [`docs/video.webm`](docs/video.webm).
+
+---
+
+## 📄 Artefatos
+
+* **Relatório Técnico:** [`Relatorio_SO_Equipe_Leôncio.pdf`](docs/Relatorio_SO_Equipe_Leôncio.pdf)
+* **Integrantes e Responsabilidades:** [`Lista_Integrantes_Responsabilidades.pdf`](docs/Lista_Integrantes_Responsabilidades.pdf) ([HTML](docs/Lista_Integrantes_Responsabilidades.html))
+
+---
 
 ## 👨💻 Equipe
 
@@ -96,18 +116,21 @@ O projeto segue uma estrutura de **Monolito Modular**, onde cada subsistema é i
 ## 🚀 Como Compilar e Executar
 
 Compile o projeto e execute o simulador no terminal com os comandos padrão:
+
 ```bash
 make       # Compilação do executável em bin/
 make run   # Execução padrão (15 veículos máximos, clock de 1000ms, mapa.txt)
 ```
 
 Para customizar a simulação sem recompilar, execute o binário diretamente com as flags:
+
 ```bash
 ./bin/simulador [-v veiculos] [-t tick_ms] [-m mapa.txt]
 ```
-* `-v <int>`: Limite de veículos simultâneos (padrão: `15`).
-* `-t <int>`: Período do relógio global em ms (padrão: `1000`).
-* `-m <string>`: Caminho do mapa de entrada (padrão: `mapa.txt`).
+
+- `-v <int>`: Limite de veículos simultâneos (padrão: `15`).
+- `-t <int>`: Período do relógio global em ms (padrão: `1000`).
+- `-m <string>`: Caminho do mapa de entrada (padrão: `mapa.txt`).
 
 Exemplo: `./bin/simulador -v 20 -t 500 -m mapa.txt`
 
@@ -116,27 +139,23 @@ Exemplo: `./bin/simulador -v 20 -t 500 -m mapa.txt`
 ## 🧪 Testes Unitários e Qualidade de Código
 
 ### Cobertura de Testes
+
 Desenvolvemos exatamente **23 testes unitários** utilizando o framework **Unity** para garantir a corretude dos algoritmos concorrentes e evitar regressões. A suíte valida a inicialização do relógio global, o parser e tratamento de limites do mapa, as regras de navegação e colisões, a integridade física dos semáforos, o ciclo de vida das threads dos veículos e o controle de prioridade e liberação segura da ambulância.
 
 Para rodar todos os testes unitários:
+
 ```bash
 make test
 ```
 
 ### Linter e Qualidade
-* **Linter (`cppcheck`):** Rastreia concorrência e vazamentos (`make lint`).
-* **Formatador (`clang-format`):** Padroniza a formatação do código (`make format`).
-* **Limpeza (`clean`):** Remove binários e arquivos objetos intermediários (`make clean`).
+
+- **Linter (`cppcheck`):** Rastreia concorrência e vazamentos (`make lint`).
+- **Formatador (`clang-format`):** Padroniza a formatação do código (`make format`).
+- **Limpeza (`clean`):** Remove binários e arquivos objetos intermediários (`make clean`).
 
 ---
 
 ## ⚙️ Pipeline de Integração Contínua (CI)
 
 O repositório utiliza **GitHub Actions** (`.github/workflows/ci.yml`) para Integração Contínua (CI). O pipeline roda a cada push ou pull request nas branches `main` e `develop`, executando automaticamente o linter (`make lint`), a validação de formatação (`clang-format`) e os 23 testes unitários (`make test`).
-
----
-
-## 📺 Demonstração em Vídeo
-
-![Demonstração do Simulador de Tráfego](caminho_do_video.mp4)
-*(Vídeo de demonstração em `caminho_do_video.mp4`)*

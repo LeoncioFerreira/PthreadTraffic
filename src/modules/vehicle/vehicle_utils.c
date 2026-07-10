@@ -1,6 +1,5 @@
 #include "vehicle_utils.h"
 #include "../deadlock/deadlock.h"
-#include "../logger/logger.h"
 #include "../navigation/navigation.h"
 #include "../traffic/traffic.h"
 #include <pthread.h>
@@ -177,29 +176,7 @@ bool vehicle_choose_next_position(const Vehicle *vehicle, const Map *map,
   calculate_next_position(*current_direction, vehicle->row, vehicle->col,
                           next_row, next_col);
 
-  if (vehicle->type == AMBULANCE) {
-    CellType current_type = map->cell_grid[vehicle->row][vehicle->col].type;
-    char current_cell_dir =
-        map->cell_grid[vehicle->row][vehicle->col].direction;
-
-    CellType next_type = EMPTY;
-    char next_cell_dir = 'X';
-
-    if (is_within_map_bounds(map, *next_row, *next_col)) {
-      next_type = map->cell_grid[*next_row][*next_col].type;
-      next_cell_dir = map->cell_grid[*next_row][*next_col].direction;
-    }
-
-    logger_write(
-        LOG_INFO,
-        "DEBUG AMB NAV: id=%d tick=%llu pos=[%d][%d] type=%d cell_dir='%c' "
-        "current_dir='%c' last_dir='%c' next=[%d][%d] next_type=%d "
-        "next_dir='%c'",
-        vehicle->id, (unsigned long long)tick, vehicle->row, vehicle->col,
-        current_type, current_cell_dir, *current_direction,
-        *last_valid_direction, *next_row, *next_col, next_type, next_cell_dir);
-  }
-
+                          
   return (*next_row != vehicle->row || *next_col != vehicle->col);
 }
 

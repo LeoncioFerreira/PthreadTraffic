@@ -176,7 +176,6 @@ bool vehicle_choose_next_position(const Vehicle *vehicle, const Map *map,
   calculate_next_position(*current_direction, vehicle->row, vehicle->col,
                           next_row, next_col);
 
-                          
   return (*next_row != vehicle->row || *next_col != vehicle->col);
 }
 

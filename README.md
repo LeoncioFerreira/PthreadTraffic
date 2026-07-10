@@ -1,7 +1,7 @@
 # PthreadTraffic
 
 [![CI Workflow](https://github.com/LeoncioFerreira/Trabalho-de-SO/actions/workflows/ci.yml/badge.svg)](https://github.com/LeoncioFerreira/Trabalho-de-SO/actions)
-[![Language: C](https://img.shields.io/badge/Language-C-blue.svg)](https://en.wikipedia.org/wiki/C_(programming_language))
+[![Language: C](https://img.shields.io/badge/Language-C-blue.svg)](<https://en.wikipedia.org/wiki/C_(programming_language)>)
 [![Concurrency: Pthreads](https://img.shields.io/badge/Concurrency-Pthreads-orange.svg)](https://en.wikipedia.org/wiki/POSIX_Threads)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -17,8 +17,8 @@ Simulador concorrente de tráfego urbano desenvolvido em C utilizando a bibliote
 
 ## 📄 Artefatos
 
-* **Relatório Técnico:** [`Relatorio_SO_Equipe_Leôncio.pdf`](docs/Relatorio_SO_Equipe_Leôncio.pdf)
-* **Integrantes e Responsabilidades:** [`Lista_Integrantes_Responsabilidades.pdf`](docs/Lista_Integrantes_Responsabilidades.pdf) ([HTML](docs/Lista_Integrantes_Responsabilidades.html))
+- **Relatório Técnico:** [`Relatorio_SO_Equipe_Leôncio.pdf`](docs/Relatorio_SO_Equipe_Leôncio.pdf)
+- **Integrantes e Responsabilidades:** [`Lista_Integrantes_Responsabilidades.pdf`](docs/Lista_Integrantes_Responsabilidades.pdf)
 
 ---
 

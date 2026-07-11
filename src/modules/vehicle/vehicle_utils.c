@@ -81,7 +81,7 @@ bool vehicle_try_reserve_movement(Vehicle *vehicle, Map *map, int next_row,
       return false;
     }
 
-    if (!already_owns_target_lock &&
+    if (!already_owns_target_lock && !current_is_intersection &&
         !traffic_try_enter_capacity(next_row, next_col)) {
       pthread_mutex_unlock(&map->cell_grid[next_row][next_col].mutex);
 

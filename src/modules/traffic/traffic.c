@@ -82,28 +82,22 @@ static void *traffic_manager_routine(void *arg) {
     for (int i = 0; i < num_lights; i++) {
       TrafficLight *tl = &lights[i];
 
-      int base_id = (tl->base_light != NULL) ? tl->base_light->id : tl->id;
+      pthread_mutex_lock(&tl->mutex);
+      LightState old_state = tl->state;
+      LightState new_state = compute_light_state(tl, current_tick);
 
-      if ((current_tick + (uint64_t)base_id) % (uint64_t)tl->toggle_ticks ==
-          0) {
-        pthread_mutex_lock(&tl->mutex);
-        LightState old_state = tl->state;
-        LightState new_state = compute_light_state(tl, current_tick);
+      if (new_state != old_state) {
+        tl->state = new_state;
 
-        if (new_state != old_state) {
-          tl->state = new_state;
-          // LOG CONCORRENTE DE ALTERAÇÃO DO SEMÁFORO
-          logger_write(LOG_INFO,
-                       "Semáforo %d em [%d][%d] alterou para estado: %s",
-                       tl->id, tl->row, tl->col,
-                       new_state == LIGHT_HORIZ_GREEN ? "VERDE HORIZONTAL"
-                                                      : "VERDE VERTICAL");
-        }
+        logger_write(LOG_INFO,
+                     "Semáforo %d em [%d][%d] alterou para estado: %s", tl->id,
+                     tl->row, tl->col,
+                     new_state == LIGHT_HORIZ_GREEN ? "VERDE HORIZONTAL"
+                                                    : "VERDE VERTICAL");
 
         semaphore_broadcast_green(tl, new_state);
-
-        pthread_mutex_unlock(&tl->mutex);
       }
+      pthread_mutex_unlock(&tl->mutex);
     }
   }
   return NULL;

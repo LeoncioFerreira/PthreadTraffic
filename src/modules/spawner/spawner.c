@@ -16,8 +16,8 @@
 #define NUM_SPAWN_POINTS 12
 
 static const int spawn_positions[NUM_SPAWN_POINTS][2] = {
-    {3, 0},  {4, 42}, {8, 0},   {9, 42}, {13, 0},  {14, 42},
-    {17, 7}, {0, 8},  {17, 16}, {0, 17}, {17, 25}, {0, 26}};
+    {3, 0},  {4, 0}, {8, 0},   {9, 42}, {13, 0},  {14, 42},
+    {17, 7}, {0, 8}, {17, 16}, {0, 17}, {17, 25}, {0, 26}};
 
 static pthread_mutex_t spawn_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t spawn_cond = PTHREAD_COND_INITIALIZER;
